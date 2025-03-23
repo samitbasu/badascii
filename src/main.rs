@@ -108,7 +108,8 @@ enum Tool {
     Rect(Option<Rectangle>),
     Text(Option<TextState>),
     Selected(Rectangle),
-    Moving(MoveState),
+    MovingText(MoveState),
+    MovingRect(MoveState),
     Polyline(LineState),
 }
 
@@ -119,6 +120,9 @@ struct Rectangle {
 }
 
 impl Rectangle {
+    fn is_empty(&self) -> bool {
+        (self.corner_1.x == self.corner_2.x) || (self.corner_1.y == self.corner_2.y)
+    }
     fn new(corner_1: TextCoordinate, corner_2: TextCoordinate) -> Rectangle {
         Rectangle { corner_1, corner_2 }
     }
@@ -157,6 +161,16 @@ impl Rectangle {
             TextCoordinate { x: min_x, y: max_y },
         ]
         .into_iter()
+    }
+
+    fn on_boundary(&self, tc: TextCoordinate) -> bool {
+        let min_x = self.corner_1.x.min(self.corner_2.x);
+        let max_x = self.corner_1.x.max(self.corner_2.x);
+        let min_y = self.corner_1.y.min(self.corner_2.y);
+        let max_y = self.corner_1.y.max(self.corner_2.y);
+        (tc.x == self.corner_1.x || tc.x == self.corner_2.x && (min_y..=max_y).contains(&tc.y))
+            || (tc.y == self.corner_1.y
+                || tc.y == self.corner_2.y && (min_x..=max_x).contains(&tc.x))
     }
 
     fn controlled_by(&self, tc: TextCoordinate) -> Option<Rectangle> {
@@ -283,6 +297,8 @@ impl TextBuffer {
     }
 }
 
+struct PolyLine(Vec<TextCoordinate>);
+
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
@@ -362,6 +378,14 @@ impl MyApp {
                 {
                     self.rects.remove(ndx);
                     self.tool = Tool::Rect(Some(corner));
+                } else if let Some(ndx) = self.rects.iter().position(|r| r.on_boundary(tc)) {
+                    let selection = self.rects[ndx];
+                    self.rects.remove(ndx);
+                    self.tool = Tool::MovingRect(MoveState {
+                        selection,
+                        origin: tc,
+                        move_pos: tc,
+                    });
                 }
             }
             _ => (),
@@ -379,7 +403,7 @@ impl MyApp {
                 self.tool = Tool::Selection(Some(tc));
             }
             Tool::Selected(rect) => {
-                self.tool = Tool::Moving(MoveState {
+                self.tool = Tool::MovingText(MoveState {
                     selection: *rect,
                     origin: tc,
                     move_pos: tc,
@@ -409,16 +433,25 @@ impl MyApp {
                     egui::StrokeKind::Middle,
                 );
             }
-            Tool::Moving(MoveState {
+            Tool::MovingText(MoveState {
                 selection,
                 origin,
                 move_pos: _,
             }) => {
-                self.tool = Tool::Moving(MoveState {
+                self.tool = Tool::MovingText(MoveState {
                     selection: *selection,
                     origin: *origin,
                     move_pos: corner2,
                 });
+            }
+            Tool::MovingRect(MoveState {
+                selection, origin, ..
+            }) => {
+                self.tool = Tool::MovingRect(MoveState {
+                    selection: *selection,
+                    origin: *origin,
+                    move_pos: corner2,
+                })
             }
             _ => {}
         }
@@ -427,7 +460,9 @@ impl MyApp {
         match &self.tool {
             Tool::Rect(Some(rect)) => {
                 let text_box = Rectangle::new(rect.corner_1, corner2);
-                self.rects.push(text_box);
+                if !text_box.is_empty() {
+                    self.rects.push(text_box);
+                }
                 self.tool = Tool::Selection(None);
             }
             Tool::Selection(Some(corner1)) => {
@@ -436,7 +471,7 @@ impl MyApp {
                 self.text.clear_rectangle(selection);
                 self.tool = Tool::Selected(selection);
             }
-            Tool::Moving(MoveState {
+            Tool::MovingText(MoveState {
                 selection,
                 origin,
                 move_pos,
@@ -447,6 +482,17 @@ impl MyApp {
                     self.text.set_text(&new_pos, selection);
                 }
                 self.selected_text.clear_all();
+                self.tool = Tool::Selection(None)
+            }
+            Tool::MovingRect(MoveState {
+                selection,
+                origin,
+                move_pos,
+            }) => {
+                let new_rect = selection.shifted(*origin, *move_pos);
+                if !new_rect.is_empty() {
+                    self.rects.push(new_rect);
+                }
                 self.tool = Tool::Selection(None)
             }
             _ => {}
@@ -469,6 +515,7 @@ impl MyApp {
                 state.anchors.push(txt_pos);
                 self.tool = Tool::Polyline(state);
             }
+            Tool::Selected(_) => self.tool = Tool::Selection(None),
             _ => {}
         }
     }
@@ -576,6 +623,15 @@ impl MyApp {
                             Color32::LIGHT_GREEN.linear_multiply(0.5),
                         );
                     }
+                } else if let Some(highlighted_rect) = self.rects.iter().find(|x| x.on_boundary(tc))
+                {
+                    let rect = self.map_rectangle_to_rect(canvas, &highlighted_rect);
+                    painter.rect_stroke(
+                        rect,
+                        1.0,
+                        (3.0, Color32::LIGHT_GREEN.linear_multiply(0.2)),
+                        egui::StrokeKind::Middle,
+                    );
                 }
             }
             _ => {}
@@ -738,7 +794,7 @@ impl eframe::App for MyApp {
                         }
                     }
                 }
-                if let Tool::Moving(MoveState {
+                if let Tool::MovingText(MoveState {
                     selection,
                     origin,
                     move_pos,
@@ -767,6 +823,20 @@ impl eframe::App for MyApp {
                         }
                     }
                 }
+                if let Tool::MovingRect(MoveState {
+                    selection,
+                    origin,
+                    move_pos,
+                }) = self.tool
+                {
+                    let bbox_shifted = selection.shifted(origin, move_pos);
+                    painter.rect_stroke(
+                        self.map_rectangle_to_rect(&canvas, &bbox_shifted),
+                        1.0,
+                        (1.0, Color32::LIGHT_GREEN),
+                        egui::StrokeKind::Middle,
+                    );
+                }
             });
             match &self.tool {
                 Tool::Rect(_) | Tool::Polyline(_) => {
@@ -778,7 +848,7 @@ impl eframe::App for MyApp {
                 Tool::Selected(..) => {
                     ctx.set_cursor_icon(CursorIcon::Grab);
                 }
-                Tool::Moving(..) => {
+                Tool::MovingText(..) | Tool::MovingRect(..) => {
                     ctx.set_cursor_icon(CursorIcon::Grabbing);
                 }
                 _ => {
