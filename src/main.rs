@@ -14,7 +14,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "My egui App",
+        "BadAscii",
         options,
         Box::new(|cc| {
             // This gives us image support:
@@ -96,9 +96,25 @@ struct MoveState {
     move_pos: TextCoordinate,
 }
 
+#[derive(Clone, Debug)]
+struct MoveLineSegment {
+    line: PolyLine,
+    segment: usize,
+    origin: TextCoordinate,
+    move_pos: TextCoordinate,
+}
+
+#[derive(Clone, Debug)]
+struct MoveLineAnchor {
+    line: PolyLine,
+    anchor: usize,
+    origin: TextCoordinate,
+    move_pos: TextCoordinate,
+}
+
 #[derive(Clone, Debug, Default)]
 struct LineState {
-    anchors: Vec<TextCoordinate>,
+    anchors: PolyLine,
     cursor: Option<TextCoordinate>,
 }
 
@@ -110,6 +126,7 @@ enum Tool {
     Selected(Rectangle),
     MovingText(MoveState),
     MovingRect(MoveState),
+    MovingLineSegment(MoveLineSegment),
     Polyline(LineState),
 }
 
@@ -297,14 +314,91 @@ impl TextBuffer {
     }
 }
 
+#[derive(Clone, Default, Debug)]
 struct PolyLine(Vec<TextCoordinate>);
+
+impl PolyLine {
+    fn last(&self) -> Option<&TextCoordinate> {
+        self.0.last()
+    }
+    fn extend(&mut self, mut pos: TextCoordinate) {
+        if let Some(last_pos) = self.0.last() {
+            pos = pos.perp_align(*last_pos);
+        }
+        self.0.push(pos);
+    }
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    fn anchors(&self) -> impl Iterator<Item = &TextCoordinate> {
+        self.0.iter()
+    }
+    fn edges(&self) -> impl Iterator<Item = Edge> {
+        self.0.windows(2).enumerate().map(|(ndx, x)| Edge {
+            start: x[0],
+            stop: x[1],
+            index: ndx,
+        })
+    }
+    fn edge(&self, ndx: usize) -> Option<Edge> {
+        self.edges().nth(ndx)
+    }
+    fn anchored_by(&self, tc: TextCoordinate) -> Option<PolyLine> {
+        if self.0.first() == Some(&tc) {
+            Some(PolyLine(self.0.iter().skip(1).rev().copied().collect()))
+        } else if self.0.last() == Some(&tc) {
+            let count = self.0.len();
+            Some(PolyLine(self.0.iter().take(count - 1).copied().collect()))
+        } else {
+            None
+        }
+    }
+    fn shifted(&self, edge: usize, origin: &TextCoordinate, cursor: &TextCoordinate) -> PolyLine {
+        let p1 = self.0[edge];
+        let p2 = self.0[edge + 1];
+        let is_horiz = p1.x == p2.x;
+        let cursor = if is_horiz {
+            TextCoordinate {
+                x: cursor.x,
+                y: origin.y,
+            }
+        } else {
+            TextCoordinate {
+                x: origin.x,
+                y: cursor.y,
+            }
+        };
+        let p1 = p1.shifted(*origin, cursor);
+        let p2 = p2.shifted(*origin, cursor);
+        let mut anchors = self.0.clone();
+        anchors[edge] = p1;
+        anchors[edge + 1] = p2;
+        PolyLine(anchors)
+    }
+}
+
+struct Edge {
+    start: TextCoordinate,
+    stop: TextCoordinate,
+    index: usize,
+}
+
+impl Edge {
+    fn on_boundary(&self, tc: TextCoordinate) -> bool {
+        Rectangle {
+            corner_1: self.start,
+            corner_2: self.stop,
+        }
+        .on_boundary(tc)
+    }
+}
 
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
     tool: Tool,
     rects: Vec<Rectangle>,
-    lines: Vec<Vec<TextCoordinate>>,
+    lines: Vec<PolyLine>,
     selected_text: TextBuffer,
     text: TextBuffer,
 }
@@ -379,13 +473,31 @@ impl MyApp {
                     self.rects.remove(ndx);
                     self.tool = Tool::Rect(Some(corner));
                 } else if let Some(ndx) = self.rects.iter().position(|r| r.on_boundary(tc)) {
-                    let selection = self.rects[ndx];
-                    self.rects.remove(ndx);
+                    let selection = self.rects.remove(ndx);
                     self.tool = Tool::MovingRect(MoveState {
                         selection,
                         origin: tc,
                         move_pos: tc,
                     });
+                } else if let Some(ndx) = self
+                    .lines
+                    .iter()
+                    .position(|l| l.edges().any(|e| e.on_boundary(tc)))
+                {
+                    if self.lines[ndx].anchored_by(tc).is_none() {
+                        let selection = self.lines.remove(ndx);
+                        let segment = selection
+                            .edges()
+                            .find(|e| e.on_boundary(tc))
+                            .map(|e| e.index)
+                            .unwrap_or_default();
+                        self.tool = Tool::MovingLineSegment(MoveLineSegment {
+                            line: selection,
+                            segment,
+                            origin: tc,
+                            move_pos: tc,
+                        });
+                    }
                 }
             }
             _ => (),
@@ -453,6 +565,19 @@ impl MyApp {
                     move_pos: corner2,
                 })
             }
+            Tool::MovingLineSegment(MoveLineSegment {
+                line,
+                segment,
+                origin,
+                ..
+            }) => {
+                self.tool = Tool::MovingLineSegment(MoveLineSegment {
+                    line: line.clone(),
+                    segment: *segment,
+                    origin: *origin,
+                    move_pos: corner2,
+                })
+            }
             _ => {}
         }
     }
@@ -495,6 +620,15 @@ impl MyApp {
                 }
                 self.tool = Tool::Selection(None)
             }
+            Tool::MovingLineSegment(MoveLineSegment {
+                line,
+                segment,
+                origin,
+                move_pos,
+            }) => {
+                self.lines.push(line.shifted(*segment, origin, move_pos));
+                self.tool = Tool::Selection(None)
+            }
             _ => {}
         }
     }
@@ -508,14 +642,24 @@ impl MyApp {
             }
             Tool::Polyline(state) => {
                 let mut state = state.clone();
-                let mut txt_pos = pos;
-                if let Some(last_pos) = state.anchors.last() {
-                    txt_pos = txt_pos.perp_align(*last_pos);
-                }
-                state.anchors.push(txt_pos);
+                state.anchors.extend(pos);
                 self.tool = Tool::Polyline(state);
             }
             Tool::Selected(_) => self.tool = Tool::Selection(None),
+            Tool::Selection(None) => {
+                if let Some((ndx, line)) = self
+                    .lines
+                    .iter()
+                    .enumerate()
+                    .find_map(|(ndx, l)| l.anchored_by(pos).map(|l| (ndx, l)))
+                {
+                    self.lines.remove(ndx);
+                    self.tool = Tool::Polyline(LineState {
+                        anchors: line,
+                        cursor: Some(pos),
+                    });
+                }
+            }
             _ => {}
         }
     }
@@ -585,12 +729,10 @@ impl MyApp {
             },
             Tool::Polyline(state) => {
                 if action == Action::Escape {
-                    if state.anchors.is_empty() {
-                        self.tool = Tool::Selection(None)
-                    } else {
+                    if !state.anchors.is_empty() {
                         self.lines.push(state.anchors.clone());
-                        self.tool = Tool::Polyline(LineState::default())
                     }
+                    self.tool = Tool::Selection(None)
                 }
             }
             _ if action == Action::Escape => self.tool = Tool::Selection(None),
@@ -625,13 +767,26 @@ impl MyApp {
                     }
                 } else if let Some(highlighted_rect) = self.rects.iter().find(|x| x.on_boundary(tc))
                 {
-                    let rect = self.map_rectangle_to_rect(canvas, &highlighted_rect);
+                    let rect = self.map_rectangle_to_rect(canvas, highlighted_rect);
                     painter.rect_stroke(
                         rect,
                         1.0,
                         (3.0, Color32::LIGHT_GREEN.linear_multiply(0.2)),
                         egui::StrokeKind::Middle,
                     );
+                } else if let Some(polyline) = self.lines.iter().find_map(|x| x.anchored_by(tc)) {
+                    let pos = self.map_text_coordinate_to_cell_center(canvas, &tc);
+                    painter.circle_filled(pos, delta_r, Color32::LIGHT_GREEN.linear_multiply(0.2));
+                } else if let Some(polyline) = self
+                    .lines
+                    .iter()
+                    .find(|x| x.edges().any(|e| e.on_boundary(tc)))
+                {
+                    let points = polyline
+                        .anchors()
+                        .map(|x| self.map_text_coordinate_to_cell_center(canvas, x))
+                        .collect();
+                    painter.line(points, (3.0, Color32::LIGHT_GREEN.linear_multiply(0.5)));
                 }
             }
             _ => {}
@@ -643,7 +798,7 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                ui.label(format!("{:?}", self.tool));
+                //ui.label(format!("{:?}", self.tool));
                 let desired_size = ui.available_size();
                 let (resp, painter) = ui.allocate_painter(desired_size, Sense::click_and_drag());
                 let canvas = resp.rect;
@@ -679,7 +834,7 @@ impl eframe::App for MyApp {
                 }
                 for line in &self.lines {
                     let points = line
-                        .iter()
+                        .anchors()
                         .map(|t| self.map_text_coordinate_to_cell_center(&canvas, t))
                         .collect::<Vec<_>>();
                     painter.line(points, (1.0, Color32::LIGHT_BLUE));
@@ -786,11 +941,11 @@ impl eframe::App for MyApp {
                             let cursor = self.map_text_coordinate_to_cell_center(&canvas, &cursor);
                             let points = state
                                 .anchors
-                                .iter()
+                                .anchors()
                                 .map(|x| self.map_text_coordinate_to_cell_center(&canvas, x))
                                 .chain(std::iter::once(cursor))
                                 .collect();
-                            painter.line(points, (1.0, Color32::DARK_RED));
+                            painter.line(points, (1.0, Color32::LIGHT_RED));
                         }
                     }
                 }
@@ -837,6 +992,20 @@ impl eframe::App for MyApp {
                         egui::StrokeKind::Middle,
                     );
                 }
+                if let Tool::MovingLineSegment(MoveLineSegment {
+                    line,
+                    segment,
+                    origin,
+                    move_pos,
+                }) = &self.tool
+                {
+                    let line = line.shifted(*segment, origin, move_pos);
+                    let points = line
+                        .anchors()
+                        .map(|x| self.map_text_coordinate_to_cell_center(&canvas, x))
+                        .collect();
+                    painter.line(points, (3.0, Color32::LIGHT_GREEN));
+                }
             });
             match &self.tool {
                 Tool::Rect(_) | Tool::Polyline(_) => {
@@ -848,7 +1017,7 @@ impl eframe::App for MyApp {
                 Tool::Selected(..) => {
                     ctx.set_cursor_icon(CursorIcon::Grab);
                 }
-                Tool::MovingText(..) | Tool::MovingRect(..) => {
+                Tool::MovingText(..) | Tool::MovingRect(..) | Tool::MovingLineSegment(..) => {
                     ctx.set_cursor_icon(CursorIcon::Grabbing);
                 }
                 _ => {
