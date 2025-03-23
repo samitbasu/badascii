@@ -25,7 +25,7 @@ fn main() -> eframe::Result {
     )
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 struct TextCoordinate {
     x: u32,
     y: u32,
@@ -103,9 +103,9 @@ struct LineState {
 }
 
 #[derive(Clone, Debug)]
-enum SelectedTool {
+enum Tool {
     Selection(Option<TextCoordinate>),
-    Rect(Option<TextCoordinate>),
+    Rect(Option<Rectangle>),
     Text(Option<TextState>),
     Selected(Rectangle),
     Moving(MoveState),
@@ -137,12 +137,57 @@ impl Rectangle {
         }
     }
 
-    fn iter(&self) -> impl Iterator<Item = TextCoordinate> {
+    fn iter_interior(&self) -> impl Iterator<Item = TextCoordinate> {
         let min_x = self.corner_1.x.min(self.corner_2.x);
         let max_x = self.corner_1.x.max(self.corner_2.x);
         let min_y = self.corner_1.y.min(self.corner_2.y);
         let max_y = self.corner_1.y.max(self.corner_2.y);
         (min_y..=max_y).flat_map(move |y| (min_x..=max_x).map(move |x| TextCoordinate { x, y }))
+    }
+
+    fn iter_corners(&self) -> impl Iterator<Item = TextCoordinate> {
+        let min_x = self.corner_1.x.min(self.corner_2.x);
+        let max_x = self.corner_1.x.max(self.corner_2.x);
+        let min_y = self.corner_1.y.min(self.corner_2.y);
+        let max_y = self.corner_1.y.max(self.corner_2.y);
+        [
+            TextCoordinate { x: min_x, y: min_y },
+            TextCoordinate { x: max_x, y: min_y },
+            TextCoordinate { x: max_x, y: max_y },
+            TextCoordinate { x: min_x, y: max_y },
+        ]
+        .into_iter()
+    }
+
+    fn controlled_by(&self, tc: TextCoordinate) -> Option<Rectangle> {
+        if tc == self.corner_1 {
+            return Some(Rectangle {
+                corner_1: self.corner_2,
+                corner_2: tc,
+            });
+        }
+        if tc == self.corner_2 {
+            return Some(*self);
+        }
+        if tc.x == self.corner_1.x && tc.y == self.corner_2.y {
+            return Some(Rectangle {
+                corner_1: TextCoordinate {
+                    x: self.corner_2.x,
+                    y: self.corner_1.y,
+                },
+                corner_2: TextCoordinate { x: tc.x, y: tc.y },
+            });
+        }
+        if tc.x == self.corner_2.x && tc.y == self.corner_1.y {
+            return Some(Rectangle {
+                corner_1: TextCoordinate {
+                    x: self.corner_1.x,
+                    y: self.corner_2.y,
+                },
+                corner_2: tc,
+            });
+        }
+        None
     }
 }
 
@@ -220,7 +265,7 @@ impl TextBuffer {
     }
 
     fn clear_rectangle(&mut self, selection: Rectangle) {
-        for pos in selection.iter() {
+        for pos in selection.iter_interior() {
             self.set_text(&pos, None);
         }
     }
@@ -241,7 +286,7 @@ impl TextBuffer {
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
-    tool: SelectedTool,
+    tool: Tool,
     rects: Vec<Rectangle>,
     lines: Vec<Vec<TextCoordinate>>,
     selected_text: TextBuffer,
@@ -255,7 +300,7 @@ impl Default for MyApp {
         Self {
             num_rows,
             num_cols,
-            tool: SelectedTool::Polyline(LineState::default()),
+            tool: Tool::Selection(None),
             lines: vec![],
             rects: vec![],
             selected_text: TextBuffer::new(num_rows, num_cols),
@@ -300,12 +345,41 @@ impl MyApp {
     fn clear_text(&mut self, position: &TextCoordinate) {
         self.text.set_text(position, None);
     }
+    fn on_interact(&mut self, tc: TextCoordinate) {
+        match &self.tool {
+            Tool::Rect(None) => {
+                self.tool = Tool::Rect(Some(Rectangle {
+                    corner_1: tc,
+                    corner_2: tc,
+                }))
+            }
+            Tool::Selection(None) => {
+                if let Some((ndx, corner)) = self
+                    .rects
+                    .iter()
+                    .enumerate()
+                    .find_map(|(ndx, r)| r.controlled_by(tc).map(|p| (ndx, p)))
+                {
+                    self.rects.remove(ndx);
+                    self.tool = Tool::Rect(Some(corner));
+                }
+            }
+            _ => (),
+        }
+    }
     fn on_drag_start(&mut self, tc: TextCoordinate) {
         match &self.tool {
-            SelectedTool::Rect(None) => self.tool = SelectedTool::Rect(Some(tc)),
-            SelectedTool::Selection(None) => self.tool = SelectedTool::Selection(Some(tc)),
-            SelectedTool::Selected(rect) => {
-                self.tool = SelectedTool::Moving(MoveState {
+            Tool::Rect(None) => {
+                self.tool = Tool::Rect(Some(Rectangle {
+                    corner_1: tc,
+                    corner_2: tc,
+                }))
+            }
+            Tool::Selection(None) => {
+                self.tool = Tool::Selection(Some(tc));
+            }
+            Tool::Selected(rect) => {
+                self.tool = Tool::Moving(MoveState {
                     selection: *rect,
                     origin: tc,
                     move_pos: tc,
@@ -318,17 +392,13 @@ impl MyApp {
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
         match &self.tool {
-            SelectedTool::Rect(Some(corner1)) => {
-                let text_box = Rectangle::new(*corner1, corner2);
-                let rect = self.map_rectangle_to_rect(canvas, &text_box);
-                painter.rect_stroke(
-                    rect,
-                    1.0,
-                    Stroke::new(1.0, Color32::WHITE),
-                    egui::StrokeKind::Middle,
-                );
+            Tool::Rect(Some(text_box)) => {
+                self.tool = Tool::Rect(Some(Rectangle {
+                    corner_1: text_box.corner_1,
+                    corner_2: corner2,
+                }));
             }
-            SelectedTool::Selection(Some(corner1)) => {
+            Tool::Selection(Some(corner1)) => {
                 let selection_box = Rectangle::new(*corner1, corner2);
                 let rect = self.map_rectangle_to_rect(canvas, &selection_box);
                 let rect = rect.expand2(vec2(delta_x / 2.0, delta_y / 2.0));
@@ -339,12 +409,12 @@ impl MyApp {
                     egui::StrokeKind::Middle,
                 );
             }
-            SelectedTool::Moving(MoveState {
+            Tool::Moving(MoveState {
                 selection,
                 origin,
                 move_pos: _,
             }) => {
-                self.tool = SelectedTool::Moving(MoveState {
+                self.tool = Tool::Moving(MoveState {
                     selection: *selection,
                     origin: *origin,
                     move_pos: corner2,
@@ -355,49 +425,49 @@ impl MyApp {
     }
     fn on_drag_stop(&mut self, corner2: TextCoordinate) {
         match &self.tool {
-            SelectedTool::Rect(Some(corner1)) => {
-                let text_box = Rectangle::new(*corner1, corner2);
+            Tool::Rect(Some(rect)) => {
+                let text_box = Rectangle::new(rect.corner_1, corner2);
                 self.rects.push(text_box);
-                self.tool = SelectedTool::Rect(None);
+                self.tool = Tool::Selection(None);
             }
-            SelectedTool::Selection(Some(corner1)) => {
+            Tool::Selection(Some(corner1)) => {
                 let selection = Rectangle::new(*corner1, corner2);
                 self.selected_text = self.text.clone();
                 self.text.clear_rectangle(selection);
-                self.tool = SelectedTool::Selected(selection);
+                self.tool = Tool::Selected(selection);
             }
-            SelectedTool::Moving(MoveState {
+            Tool::Moving(MoveState {
                 selection,
                 origin,
                 move_pos,
             }) => {
-                for pos in selection.iter() {
+                for pos in selection.iter_interior() {
                     let selection = self.selected_text.get(pos);
                     let new_pos = pos.shifted(*origin, *move_pos);
                     self.text.set_text(&new_pos, selection);
                 }
                 self.selected_text.clear_all();
-                self.tool = SelectedTool::Selection(None)
+                self.tool = Tool::Selection(None)
             }
             _ => {}
         }
     }
     fn on_click(&mut self, pos: TextCoordinate) {
         match &self.tool {
-            SelectedTool::Text(_) => {
-                self.tool = SelectedTool::Text(Some(TextState {
+            Tool::Text(_) => {
+                self.tool = Tool::Text(Some(TextState {
                     origin: pos,
                     cursor: pos,
                 }))
             }
-            SelectedTool::Polyline(state) => {
+            Tool::Polyline(state) => {
                 let mut state = state.clone();
                 let mut txt_pos = pos;
                 if let Some(last_pos) = state.anchors.last() {
                     txt_pos = txt_pos.perp_align(*last_pos);
                 }
                 state.anchors.push(txt_pos);
-                self.tool = SelectedTool::Polyline(state);
+                self.tool = Tool::Polyline(state);
             }
             _ => {}
         }
@@ -407,48 +477,48 @@ impl MyApp {
         match action {
             Action::Backspace => {
                 self.clear_text(&cursor);
-                self.tool = SelectedTool::Text(Some(TextState {
+                self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.left(),
                 }));
             }
             Action::Char(ch) => {
                 self.set_text(ch, &cursor);
-                self.tool = SelectedTool::Text(Some(TextState {
+                self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.right(),
                 }));
             }
             Action::RightArrow => {
-                self.tool = SelectedTool::Text(Some(TextState {
+                self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.right(),
                 }));
             }
             Action::LeftArrow => {
-                self.tool = SelectedTool::Text(Some(TextState {
+                self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.left(),
                 }));
             }
             Action::UpArrow => {
-                self.tool = SelectedTool::Text(Some(TextState {
+                self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.up(),
                 }));
             }
             Action::DownArrow => {
-                self.tool = SelectedTool::Text(Some(TextState {
+                self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.down(),
                 }));
             }
             Action::Escape => {
-                self.tool = SelectedTool::Selection(None);
+                self.tool = Tool::Selection(None);
             }
             Action::Enter => {
                 let origin = origin.down();
-                self.tool = SelectedTool::Text(Some(TextState {
+                self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: origin,
                 }));
@@ -457,26 +527,57 @@ impl MyApp {
     }
     fn on_action(&mut self, action: Action) {
         match &self.tool {
-            SelectedTool::Text(Some(text_state)) => {
+            Tool::Text(Some(text_state)) => {
                 self.on_action_with_text(*text_state, action);
             }
-            SelectedTool::Selection(None) => match action {
-                Action::Char('r') => self.tool = SelectedTool::Rect(None),
-                Action::Char('t') => self.tool = SelectedTool::Text(None),
-                Action::Char('w') => self.tool = SelectedTool::Polyline(LineState::default()),
+            Tool::Selection(None) => match action {
+                Action::Char('r') => self.tool = Tool::Rect(None),
+                Action::Char('t') => self.tool = Tool::Text(None),
+                Action::Char('w') => self.tool = Tool::Polyline(LineState::default()),
                 _ => {}
             },
-            SelectedTool::Polyline(state) => {
+            Tool::Polyline(state) => {
                 if action == Action::Escape {
                     if state.anchors.is_empty() {
-                        self.tool = SelectedTool::Selection(None)
+                        self.tool = Tool::Selection(None)
                     } else {
                         self.lines.push(state.anchors.clone());
-                        self.tool = SelectedTool::Polyline(LineState::default())
+                        self.tool = Tool::Polyline(LineState::default())
                     }
                 }
             }
-            _ if action == Action::Escape => self.tool = SelectedTool::Selection(None),
+            _ if action == Action::Escape => self.tool = Tool::Selection(None),
+            _ => {}
+        }
+    }
+    fn on_hover(&mut self, tc: TextCoordinate, canvas: &Rect, painter: &Painter) {
+        let delta_x = canvas.width() / self.num_cols as f32;
+        let delta_y = canvas.height() / self.num_rows as f32;
+        let delta_r = delta_x.min(delta_y);
+        match &mut self.tool {
+            Tool::Polyline(state) => {
+                state.cursor = Some(tc);
+            }
+            Tool::Selection(None) => {
+                if let Some(highlighted_rect) = self.rects.iter().find_map(|x| x.controlled_by(tc))
+                {
+                    let rect = self.map_rectangle_to_rect(canvas, &highlighted_rect);
+                    painter.rect_stroke(
+                        rect,
+                        1.0,
+                        (3.0, Color32::LIGHT_GREEN.linear_multiply(0.2)),
+                        egui::StrokeKind::Middle,
+                    );
+                    for corner in highlighted_rect.iter_corners() {
+                        let center = self.map_text_coordinate_to_cell_center(canvas, &corner);
+                        painter.circle_filled(
+                            center,
+                            delta_r,
+                            Color32::LIGHT_GREEN.linear_multiply(0.5),
+                        );
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -549,9 +650,7 @@ impl eframe::App for MyApp {
                             1.0,
                             Color32::LIGHT_BLUE.linear_multiply(0.3),
                         );
-                        if let SelectedTool::Polyline(state) = &mut self.tool {
-                            state.cursor = Some(text_coordinate);
-                        }
+                        self.on_hover(text_coordinate, &canvas, &painter);
                     }
                 }
                 if let Some(pos) = resp.interact_pointer_pos() {
@@ -564,6 +663,8 @@ impl eframe::App for MyApp {
                             self.on_drag_stop(text_coordinate);
                         } else if resp.clicked() {
                             self.on_click(text_coordinate);
+                        } else {
+                            self.on_interact(text_coordinate);
                         }
                     }
                 }
@@ -580,8 +681,16 @@ impl eframe::App for MyApp {
                 }) {
                     self.on_action(action);
                 }
-
-                if let SelectedTool::Text(Some(TextState { origin, cursor })) = self.tool {
+                if let Tool::Rect(Some(text_box)) = self.tool {
+                    let rect = self.map_rectangle_to_rect(&canvas, &text_box);
+                    painter.rect_stroke(
+                        rect,
+                        1.0,
+                        Stroke::new(1.0, Color32::WHITE),
+                        egui::StrokeKind::Middle,
+                    );
+                }
+                if let Tool::Text(Some(TextState { origin, cursor })) = self.tool {
                     let center = self.map_text_coordinate_to_cell_center(&canvas, &cursor);
                     let rect = Rect::from_center_size(center, vec2(delta_x, delta_y));
                     painter.rect_stroke(
@@ -591,7 +700,7 @@ impl eframe::App for MyApp {
                         egui::StrokeKind::Middle,
                     );
                 }
-                if let SelectedTool::Selected(selection_box) = self.tool {
+                if let Tool::Selected(selection_box) = self.tool {
                     let rect = self.map_rectangle_to_rect(&canvas, &selection_box);
                     let rect = rect.expand2(vec2(delta_x / 2.0, delta_y / 2.0));
                     painter.rect_stroke(
@@ -614,7 +723,7 @@ impl eframe::App for MyApp {
                         }
                     }
                 }
-                if let SelectedTool::Polyline(state) = &self.tool {
+                if let Tool::Polyline(state) = &self.tool {
                     if let Some(last_pos) = state.anchors.last() {
                         if let Some(cursor) = state.cursor {
                             let cursor = cursor.perp_align(*last_pos);
@@ -629,7 +738,7 @@ impl eframe::App for MyApp {
                         }
                     }
                 }
-                if let SelectedTool::Moving(MoveState {
+                if let Tool::Moving(MoveState {
                     selection,
                     origin,
                     move_pos,
@@ -660,16 +769,16 @@ impl eframe::App for MyApp {
                 }
             });
             match &self.tool {
-                SelectedTool::Rect(_) | SelectedTool::Polyline(_) => {
+                Tool::Rect(_) | Tool::Polyline(_) => {
                     ctx.set_cursor_icon(CursorIcon::Crosshair);
                 }
-                SelectedTool::Text(_) => {
+                Tool::Text(_) => {
                     ctx.set_cursor_icon(CursorIcon::Text);
                 }
-                SelectedTool::Selected(..) => {
+                Tool::Selected(..) => {
                     ctx.set_cursor_icon(CursorIcon::Grab);
                 }
-                SelectedTool::Moving(..) => {
+                Tool::Moving(..) => {
                     ctx.set_cursor_icon(CursorIcon::Grabbing);
                 }
                 _ => {
