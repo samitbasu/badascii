@@ -1,6 +1,35 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
+/**
+ *      .----
+ *      |
+ *   ---| i.data
+ *      |
+ *   ---| i.prev
+ *      |
+ *   -->| next
+ *      |
+ *      .____
+ *
+ * For each pin, we need
+ *   - name                 } - these come from the struct?
+ *   - direction (in/out)   }
+ *   - interface (optional)   - encoded in the name?
+ *   - side (l/r)          
+ *   - offset from center (+/-)
+ *
+ * For the overall block we also need
+ *   - padx (padding between the l/r labels)
+ *   - pady (padding between the top and bottom labels)
+ *
+ * Simplest solution
+ *   - Add a pin tool (or tools?  Maybe an input tool and an output tool)
+ *   - Select a point on a rectangle boundary (l or right)
+ *   - Enter the name of the pin
+ *
+ *  When pasting, extract pins from the symbol?
+ */
 use eframe::{egui, glow::COLOR_RENDERABLE};
 use egui::{
     Align2, Color32, CursorIcon, Event, EventFilter, FontId, Key, Modifiers, Painter, Pos2, Rect,
@@ -104,14 +133,6 @@ struct MoveLineSegment {
     move_pos: TextCoordinate,
 }
 
-#[derive(Clone, Debug)]
-struct MoveLineAnchor {
-    line: PolyLine,
-    anchor: usize,
-    origin: TextCoordinate,
-    move_pos: TextCoordinate,
-}
-
 #[derive(Clone, Debug, Default)]
 struct LineState {
     anchors: PolyLine,
@@ -185,9 +206,9 @@ impl Rectangle {
         let max_x = self.corner_1.x.max(self.corner_2.x);
         let min_y = self.corner_1.y.min(self.corner_2.y);
         let max_y = self.corner_1.y.max(self.corner_2.y);
-        (tc.x == self.corner_1.x || tc.x == self.corner_2.x && (min_y..=max_y).contains(&tc.y))
-            || (tc.y == self.corner_1.y
-                || tc.y == self.corner_2.y && (min_x..=max_x).contains(&tc.x))
+        ((tc.x == self.corner_1.x || tc.x == self.corner_2.x) && (min_y..=max_y).contains(&tc.y))
+            || ((tc.y == self.corner_1.y || tc.y == self.corner_2.y)
+                && (min_x..=max_x).contains(&tc.x))
     }
 
     fn controlled_by(&self, tc: TextCoordinate) -> Option<Rectangle> {
@@ -234,33 +255,17 @@ enum Action {
     Enter,
 }
 
-fn map_key(key: &Key, modifiers: &Modifiers) -> Option<Action> {
-    let ret = match key {
-        Key::Space => Some(' '),
-        Key::Questionmark => Some('?'),
-        Key::Slash => Some('/'),
-        Key::Colon => Some(':'),
-        Key::Backtick => Some('`'),
-        Key::CloseBracket => Some('['),
-        Key::Exclamationmark => Some('!'),
-        Key::Plus => Some('+'),
-        Key::Minus => Some('-'),
-        Key::Pipe => Some('|'),
-        Key::Backspace => return Some(Action::Backspace),
-        Key::ArrowUp => return Some(Action::UpArrow),
-        Key::ArrowDown => return Some(Action::DownArrow),
-        Key::ArrowLeft => return Some(Action::LeftArrow),
-        Key::ArrowRight => return Some(Action::RightArrow),
-        Key::Escape => return Some(Action::Escape),
-        Key::Enter => return Some(Action::Enter),
-        _ => key.name().chars().next(),
-    };
-    let ret = if !modifiers.shift {
-        ret.map(|c| c.to_ascii_lowercase())
-    } else {
-        ret
-    };
-    ret.map(Action::Char)
+fn map_key(key: &Key) -> Option<Action> {
+    match key {
+        Key::Backspace => Some(Action::Backspace),
+        Key::ArrowUp => Some(Action::UpArrow),
+        Key::ArrowDown => Some(Action::DownArrow),
+        Key::ArrowLeft => Some(Action::LeftArrow),
+        Key::ArrowRight => Some(Action::RightArrow),
+        Key::Escape => Some(Action::Escape),
+        Key::Enter => Some(Action::Enter),
+        _ => None,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -645,7 +650,14 @@ impl MyApp {
                 state.anchors.extend(pos);
                 self.tool = Tool::Polyline(state);
             }
-            Tool::Selected(_) => self.tool = Tool::Selection(None),
+            Tool::Selected(selection_box) => {
+                for pos in selection_box.iter_interior() {
+                    let selection = self.selected_text.get(pos);
+                    self.text.set_text(&pos, selection);
+                }
+                self.selected_text.clear_all();
+                self.tool = Tool::Selection(None);
+            }
             Tool::Selection(None) => {
                 if let Some((ndx, line)) = self
                     .lines
@@ -659,6 +671,10 @@ impl MyApp {
                         cursor: Some(pos),
                     });
                 }
+            }
+            Tool::MovingLineSegment(state) => {
+                self.lines.push(state.line.clone());
+                self.tool = Tool::Selection(None);
             }
             _ => {}
         }
@@ -735,6 +751,10 @@ impl MyApp {
                     self.tool = Tool::Selection(None)
                 }
             }
+            Tool::MovingRect(state) if action == Action::Escape => {
+                self.rects.push(state.selection);
+                self.tool = Tool::Selection(None)
+            }
             _ if action == Action::Escape => self.tool = Tool::Selection(None),
             _ => {}
         }
@@ -786,7 +806,7 @@ impl MyApp {
                         .anchors()
                         .map(|x| self.map_text_coordinate_to_cell_center(canvas, x))
                         .collect();
-                    painter.line(points, (3.0, Color32::LIGHT_GREEN.linear_multiply(0.5)));
+                    painter.line(points, (1.0, Color32::LIGHT_GREEN.linear_multiply(0.5)));
                 }
             }
             _ => {}
@@ -881,12 +901,16 @@ impl eframe::App for MyApp {
                 }
                 if let Some(action) = ui.input(|i| {
                     i.events.iter().find_map(|x| match x {
+                        Event::Text(string) => {
+                            if string.len() == 1 {
+                                Some(Action::Char(string.chars().nth(0).unwrap()))
+                            } else {
+                                None
+                            }
+                        }
                         Event::Key {
-                            key,
-                            pressed: true,
-                            modifiers,
-                            ..
-                        } => map_key(key, modifiers),
+                            key, pressed: true, ..
+                        } => map_key(key),
                         _ => None,
                     })
                 }) {
@@ -914,12 +938,6 @@ impl eframe::App for MyApp {
                 if let Tool::Selected(selection_box) = self.tool {
                     let rect = self.map_rectangle_to_rect(&canvas, &selection_box);
                     let rect = rect.expand2(vec2(delta_x / 2.0, delta_y / 2.0));
-                    painter.rect_stroke(
-                        rect,
-                        1.0,
-                        (1.0, Color32::LIGHT_GREEN),
-                        egui::StrokeKind::Middle,
-                    );
                     for (coord, ch) in self.selected_text.iter() {
                         if selection_box.contains(&coord) {
                             let center = self.map_text_coordinate_to_cell_center(&canvas, &coord);
@@ -929,7 +947,7 @@ impl eframe::App for MyApp {
                                 Align2::CENTER_CENTER,
                                 ch,
                                 monospace,
-                                Color32::WHITE.linear_multiply(0.5),
+                                Color32::GREEN.linear_multiply(0.5),
                             );
                         }
                     }
@@ -956,13 +974,6 @@ impl eframe::App for MyApp {
                 }) = self.tool
                 {
                     let bbox_shifted = selection.shifted(origin, move_pos);
-                    painter.rect_stroke(
-                        self.map_rectangle_to_rect(&canvas, &bbox_shifted)
-                            .expand2(vec2(delta_x / 2.0, delta_y / 2.0)),
-                        1.0,
-                        (1.0, Color32::LIGHT_GREEN),
-                        egui::StrokeKind::Middle,
-                    );
                     for (coord, ch) in self.selected_text.iter() {
                         let coord = coord.shifted(origin, move_pos);
                         if bbox_shifted.contains(&coord) {
@@ -973,7 +984,7 @@ impl eframe::App for MyApp {
                                 Align2::CENTER_CENTER,
                                 ch,
                                 monospace,
-                                Color32::WHITE,
+                                Color32::GREEN,
                             );
                         }
                     }
@@ -1004,7 +1015,12 @@ impl eframe::App for MyApp {
                         .anchors()
                         .map(|x| self.map_text_coordinate_to_cell_center(&canvas, x))
                         .collect();
-                    painter.line(points, (3.0, Color32::LIGHT_GREEN));
+                    painter.line(points, (1.0, Color32::LIGHT_GREEN));
+                    if let Some(edge) = line.edge(*segment) {
+                        let start = self.map_text_coordinate_to_cell_center(&canvas, &edge.start);
+                        let end = self.map_text_coordinate_to_cell_center(&canvas, &edge.stop);
+                        painter.line_segment([start, end], (3.0, Color32::LIGHT_GREEN));
+                    }
                 }
             });
             match &self.tool {
