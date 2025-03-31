@@ -241,9 +241,28 @@ impl Rectangle {
         }
         None
     }
+
+    fn height(&self) -> u32 {
+        let y_min = self.corner_1.y.min(self.corner_2.y);
+        let y_max = self.corner_1.y.max(self.corner_2.y);
+        y_max - y_min + 1
+    }
+    fn width(&self) -> u32 {
+        let x_min = self.corner_1.x.min(self.corner_2.x);
+        let x_max = self.corner_1.x.max(self.corner_2.x);
+        x_max - x_min + 1
+    }
+
+    fn left(&self) -> u32 {
+        self.corner_1.x.min(self.corner_2.x)
+    }
+
+    fn top(&self) -> u32 {
+        self.corner_1.y.min(self.corner_2.y)
+    }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Action {
     Char(char),
     Backspace,
@@ -251,19 +270,30 @@ enum Action {
     RightArrow,
     UpArrow,
     DownArrow,
+    LeftControlArrow,
+    RightControlArrow,
+    UpControlArrow,
+    DownControlArrow,
     Escape,
     Enter,
+    Paste(String),
+    Copy,
 }
 
-fn map_key(key: &Key) -> Option<Action> {
+fn map_key(key: &Key, modifiers: &Modifiers) -> Option<Action> {
     match key {
         Key::Backspace => Some(Action::Backspace),
-        Key::ArrowUp => Some(Action::UpArrow),
-        Key::ArrowDown => Some(Action::DownArrow),
-        Key::ArrowLeft => Some(Action::LeftArrow),
-        Key::ArrowRight => Some(Action::RightArrow),
+        Key::ArrowUp if modifiers.shift_only() => Some(Action::UpControlArrow),
+        Key::ArrowDown if modifiers.shift_only() => Some(Action::DownControlArrow),
+        Key::ArrowLeft if modifiers.shift_only() => Some(Action::LeftControlArrow),
+        Key::ArrowRight if modifiers.shift_only() => Some(Action::RightControlArrow),
+        Key::ArrowUp if !modifiers.any() => Some(Action::UpArrow),
+        Key::ArrowDown if !modifiers.any() => Some(Action::DownArrow),
+        Key::ArrowLeft if !modifiers.any() => Some(Action::LeftArrow),
+        Key::ArrowRight if !modifiers.any() => Some(Action::RightArrow),
         Key::Escape => Some(Action::Escape),
         Key::Enter => Some(Action::Enter),
+        Key::Copy => Some(Action::Copy),
         _ => None,
     }
 }
@@ -316,6 +346,45 @@ impl TextBuffer {
 
     fn clear_all(&mut self) {
         self.buffer.fill(None)
+    }
+
+    fn paste(&mut self, initial_text: &str, pos: TextCoordinate) {
+        for (row, line) in initial_text.lines().enumerate() {
+            for (col, char) in line.chars().enumerate() {
+                let pos = TextCoordinate {
+                    x: pos.x + col as u32,
+                    y: pos.y + row as u32,
+                };
+                self.set_text(&pos, Some(char))
+            }
+        }
+    }
+    fn window(&self, rect: &Rectangle) -> TextBuffer {
+        let mut out_buffer = TextBuffer::new(rect.height(), rect.width());
+        let min_x = rect.left();
+        let min_y = rect.top();
+        for row in 0..rect.height() {
+            for col in 0..rect.width() {
+                out_buffer.set_text(
+                    &TextCoordinate { x: col, y: row },
+                    self.get(TextCoordinate {
+                        x: min_x + col,
+                        y: min_y + row,
+                    }),
+                )
+            }
+        }
+        out_buffer
+    }
+
+    fn render(&self) -> String {
+        let rows = self.buffer.chunks(self.num_cols as usize);
+        let t = rows.flat_map(|x| {
+            x.iter()
+                .map(|c| c.unwrap_or(' '))
+                .chain(std::iter::once('\n'))
+        });
+        t.collect()
     }
 }
 
@@ -406,12 +475,27 @@ struct MyApp {
     lines: Vec<PolyLine>,
     selected_text: TextBuffer,
     text: TextBuffer,
+    copy_buffer: Option<String>,
 }
+
+const INITIAL_TEXT: &str = "
+     +---------------------+
+     |                     |
+    >| data           data |o
+     |                     |
+    o| full           next |>
+     |                     |
+    o| overflow  underflow |o   
+     |                     |
+     +---------------------+
+";
 
 impl Default for MyApp {
     fn default() -> Self {
         let num_rows = 40;
         let num_cols = 100;
+        let mut text = TextBuffer::new(num_rows, num_cols);
+        text.paste(INITIAL_TEXT, TextCoordinate { x: 20, y: 5 });
         Self {
             num_rows,
             num_cols,
@@ -419,7 +503,8 @@ impl Default for MyApp {
             lines: vec![],
             rects: vec![],
             selected_text: TextBuffer::new(num_rows, num_cols),
-            text: TextBuffer::new(num_rows, num_cols),
+            text,
+            copy_buffer: None,
         }
     }
 }
@@ -526,6 +611,7 @@ impl MyApp {
                     move_pos: tc,
                 })
             }
+            Tool::Text(_) => self.tool = Tool::Selection(Some(tc)),
             _ => (),
         }
     }
@@ -670,6 +756,11 @@ impl MyApp {
                         anchors: line,
                         cursor: Some(pos),
                     });
+                } else {
+                    self.tool = Tool::Text(Some(TextState {
+                        origin: pos,
+                        cursor: pos,
+                    }));
                 }
             }
             Tool::MovingLineSegment(state) => {
@@ -682,6 +773,9 @@ impl MyApp {
     fn on_action_with_text(&mut self, text_state: TextState, action: Action) {
         let TextState { cursor, origin } = text_state;
         match action {
+            Action::Paste(txt) => {
+                self.text.paste(&txt, cursor);
+            }
             Action::Backspace => {
                 self.clear_text(&cursor);
                 self.tool = Tool::Text(Some(TextState {
@@ -696,10 +790,24 @@ impl MyApp {
                     cursor: cursor.right(),
                 }));
             }
+            Action::RightControlArrow => {
+                self.set_text('-', &cursor);
+                self.tool = Tool::Text(Some(TextState {
+                    origin,
+                    cursor: cursor.right(),
+                }));
+            }
             Action::RightArrow => {
                 self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.right(),
+                }));
+            }
+            Action::LeftControlArrow => {
+                self.set_text('-', &cursor);
+                self.tool = Tool::Text(Some(TextState {
+                    origin,
+                    cursor: cursor.left(),
                 }));
             }
             Action::LeftArrow => {
@@ -708,10 +816,24 @@ impl MyApp {
                     cursor: cursor.left(),
                 }));
             }
+            Action::UpControlArrow => {
+                self.set_text('|', &cursor);
+                self.tool = Tool::Text(Some(TextState {
+                    origin,
+                    cursor: cursor.up(),
+                }));
+            }
             Action::UpArrow => {
                 self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.up(),
+                }));
+            }
+            Action::DownControlArrow => {
+                self.set_text('|', &cursor);
+                self.tool = Tool::Text(Some(TextState {
+                    origin,
+                    cursor: cursor.down(),
                 }));
             }
             Action::DownArrow => {
@@ -730,6 +852,9 @@ impl MyApp {
                     cursor: origin,
                 }));
             }
+            Action::Copy => {
+                self.copy_buffer = Some(self.text.render());
+            }
         }
     }
     fn on_action(&mut self, action: Action) {
@@ -741,8 +866,16 @@ impl MyApp {
                 Action::Char('r') => self.tool = Tool::Rect(None),
                 Action::Char('t') => self.tool = Tool::Text(None),
                 Action::Char('w') => self.tool = Tool::Polyline(LineState::default()),
+                Action::Copy => {
+                    eprintln!("Copy of buffer");
+                    self.copy_buffer = Some(self.text.render());
+                }
                 _ => {}
             },
+            Tool::Selected(rect) if action == Action::Copy => {
+                let selection = self.selected_text.window(rect);
+                self.copy_buffer = Some(selection.render());
+            }
             Tool::Polyline(state) => {
                 if action == Action::Escape {
                     if !state.anchors.is_empty() {
@@ -909,8 +1042,13 @@ impl eframe::App for MyApp {
                             }
                         }
                         Event::Key {
-                            key, pressed: true, ..
-                        } => map_key(key),
+                            key,
+                            pressed: true,
+                            modifiers,
+                            ..
+                        } => map_key(key, modifiers),
+                        Event::Paste(string) => Some(Action::Paste(string.clone())),
+                        Event::Copy => Some(Action::Copy),
                         _ => None,
                     })
                 }) {
@@ -1039,6 +1177,9 @@ impl eframe::App for MyApp {
                 _ => {
                     ctx.set_cursor_icon(CursorIcon::Default);
                 }
+            }
+            if let Some(txt) = std::mem::take(&mut self.copy_buffer) {
+                ctx.copy_text(txt);
             }
         });
     }
