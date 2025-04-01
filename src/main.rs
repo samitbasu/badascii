@@ -1,6 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
+// Needs:
+// Undo Redo
+// Variable canvas size
+// SVG export - maybe with roughr
+
 /**
  *      .----
  *      |
@@ -32,8 +37,8 @@
  */
 use eframe::{egui, glow::COLOR_RENDERABLE};
 use egui::{
-    Align2, Color32, CursorIcon, Event, EventFilter, FontId, Key, Modifiers, Painter, Pos2, Rect,
-    Response, Sense, Stroke, UiBuilder, epaint::PathStroke, pos2, text, vec2,
+    Align2, Color32, CursorIcon, DragValue, Event, EventFilter, FontId, Key, Modifiers, Painter,
+    Pos2, Rect, Response, Sense, Stroke, UiBuilder, epaint::PathStroke, pos2, text, vec2,
 };
 
 fn main() -> eframe::Result {
@@ -54,7 +59,7 @@ fn main() -> eframe::Result {
     )
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Default)]
 struct TextCoordinate {
     x: u32,
     y: u32,
@@ -126,29 +131,11 @@ struct MoveState {
 }
 
 #[derive(Clone, Debug)]
-struct MoveLineSegment {
-    line: PolyLine,
-    segment: usize,
-    origin: TextCoordinate,
-    move_pos: TextCoordinate,
-}
-
-#[derive(Clone, Debug, Default)]
-struct LineState {
-    anchors: PolyLine,
-    cursor: Option<TextCoordinate>,
-}
-
-#[derive(Clone, Debug)]
 enum Tool {
     Selection(Option<TextCoordinate>),
-    Rect(Option<Rectangle>),
     Text(Option<TextState>),
     Selected(Rectangle),
     MovingText(MoveState),
-    MovingRect(MoveState),
-    MovingLineSegment(MoveLineSegment),
-    Polyline(LineState),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -348,16 +335,21 @@ impl TextBuffer {
         self.buffer.fill(None)
     }
 
-    fn paste(&mut self, initial_text: &str, pos: TextCoordinate) {
+    fn paste(&mut self, initial_text: &str, pos: TextCoordinate) -> Rectangle {
+        let corner_1 = pos;
+        let mut corner_2 = corner_1;
         for (row, line) in initial_text.lines().enumerate() {
             for (col, char) in line.chars().enumerate() {
                 let pos = TextCoordinate {
                     x: pos.x + col as u32,
                     y: pos.y + row as u32,
                 };
+                corner_2.x = corner_2.x.max(pos.x);
+                corner_2.y = corner_2.y.max(pos.y);
                 self.set_text(&pos, Some(char))
             }
         }
+        Rectangle { corner_1, corner_2 }
     }
     fn window(&self, rect: &Rectangle) -> TextBuffer {
         let mut out_buffer = TextBuffer::new(rect.height(), rect.width());
@@ -386,68 +378,16 @@ impl TextBuffer {
         });
         t.collect()
     }
-}
 
-#[derive(Clone, Default, Debug)]
-struct PolyLine(Vec<TextCoordinate>);
-
-impl PolyLine {
-    fn last(&self) -> Option<&TextCoordinate> {
-        self.0.last()
-    }
-    fn extend(&mut self, mut pos: TextCoordinate) {
-        if let Some(last_pos) = self.0.last() {
-            pos = pos.perp_align(*last_pos);
-        }
-        self.0.push(pos);
-    }
-    fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-    fn anchors(&self) -> impl Iterator<Item = &TextCoordinate> {
-        self.0.iter()
-    }
-    fn edges(&self) -> impl Iterator<Item = Edge> {
-        self.0.windows(2).enumerate().map(|(ndx, x)| Edge {
-            start: x[0],
-            stop: x[1],
-            index: ndx,
-        })
-    }
-    fn edge(&self, ndx: usize) -> Option<Edge> {
-        self.edges().nth(ndx)
-    }
-    fn anchored_by(&self, tc: TextCoordinate) -> Option<PolyLine> {
-        if self.0.first() == Some(&tc) {
-            Some(PolyLine(self.0.iter().skip(1).rev().copied().collect()))
-        } else if self.0.last() == Some(&tc) {
-            let count = self.0.len();
-            Some(PolyLine(self.0.iter().take(count - 1).copied().collect()))
-        } else {
-            None
-        }
-    }
-    fn shifted(&self, edge: usize, origin: &TextCoordinate, cursor: &TextCoordinate) -> PolyLine {
-        let p1 = self.0[edge];
-        let p2 = self.0[edge + 1];
-        let is_horiz = p1.x == p2.x;
-        let cursor = if is_horiz {
-            TextCoordinate {
-                x: cursor.x,
-                y: origin.y,
+    fn resize(&self, resize: Resize) -> TextBuffer {
+        let mut output = TextBuffer::new(resize.num_rows, resize.num_cols);
+        for row in 0..resize.num_rows {
+            for col in 0..resize.num_cols {
+                let tc = TextCoordinate { x: col, y: row };
+                output.set_text(&tc, self.get(tc));
             }
-        } else {
-            TextCoordinate {
-                x: origin.x,
-                y: cursor.y,
-            }
-        };
-        let p1 = p1.shifted(*origin, cursor);
-        let p2 = p2.shifted(*origin, cursor);
-        let mut anchors = self.0.clone();
-        anchors[edge] = p1;
-        anchors[edge + 1] = p2;
-        PolyLine(anchors)
+        }
+        output
     }
 }
 
@@ -467,15 +407,20 @@ impl Edge {
     }
 }
 
+struct Resize {
+    num_rows: u32,
+    num_cols: u32,
+}
+
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
     tool: Tool,
-    rects: Vec<Rectangle>,
-    lines: Vec<PolyLine>,
     selected_text: TextBuffer,
     text: TextBuffer,
     copy_buffer: Option<String>,
+    hover_pos: Option<TextCoordinate>,
+    resize: Option<Resize>,
 }
 
 const INITIAL_TEXT: &str = "
@@ -500,11 +445,11 @@ impl Default for MyApp {
             num_rows,
             num_cols,
             tool: Tool::Selection(None),
-            lines: vec![],
-            rects: vec![],
             selected_text: TextBuffer::new(num_rows, num_cols),
             text,
             copy_buffer: None,
+            hover_pos: None,
+            resize: None,
         }
     }
 }
@@ -547,60 +492,12 @@ impl MyApp {
     }
     fn on_interact(&mut self, tc: TextCoordinate) {
         match &self.tool {
-            Tool::Rect(None) => {
-                self.tool = Tool::Rect(Some(Rectangle {
-                    corner_1: tc,
-                    corner_2: tc,
-                }))
-            }
-            Tool::Selection(None) => {
-                if let Some((ndx, corner)) = self
-                    .rects
-                    .iter()
-                    .enumerate()
-                    .find_map(|(ndx, r)| r.controlled_by(tc).map(|p| (ndx, p)))
-                {
-                    self.rects.remove(ndx);
-                    self.tool = Tool::Rect(Some(corner));
-                } else if let Some(ndx) = self.rects.iter().position(|r| r.on_boundary(tc)) {
-                    let selection = self.rects.remove(ndx);
-                    self.tool = Tool::MovingRect(MoveState {
-                        selection,
-                        origin: tc,
-                        move_pos: tc,
-                    });
-                } else if let Some(ndx) = self
-                    .lines
-                    .iter()
-                    .position(|l| l.edges().any(|e| e.on_boundary(tc)))
-                {
-                    if self.lines[ndx].anchored_by(tc).is_none() {
-                        let selection = self.lines.remove(ndx);
-                        let segment = selection
-                            .edges()
-                            .find(|e| e.on_boundary(tc))
-                            .map(|e| e.index)
-                            .unwrap_or_default();
-                        self.tool = Tool::MovingLineSegment(MoveLineSegment {
-                            line: selection,
-                            segment,
-                            origin: tc,
-                            move_pos: tc,
-                        });
-                    }
-                }
-            }
+            Tool::Selection(None) => {}
             _ => (),
         }
     }
     fn on_drag_start(&mut self, tc: TextCoordinate) {
         match &self.tool {
-            Tool::Rect(None) => {
-                self.tool = Tool::Rect(Some(Rectangle {
-                    corner_1: tc,
-                    corner_2: tc,
-                }))
-            }
             Tool::Selection(None) => {
                 self.tool = Tool::Selection(Some(tc));
             }
@@ -619,12 +516,6 @@ impl MyApp {
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
         match &self.tool {
-            Tool::Rect(Some(text_box)) => {
-                self.tool = Tool::Rect(Some(Rectangle {
-                    corner_1: text_box.corner_1,
-                    corner_2: corner2,
-                }));
-            }
             Tool::Selection(Some(corner1)) => {
                 let selection_box = Rectangle::new(*corner1, corner2);
                 let rect = self.map_rectangle_to_rect(canvas, &selection_box);
@@ -647,40 +538,11 @@ impl MyApp {
                     move_pos: corner2,
                 });
             }
-            Tool::MovingRect(MoveState {
-                selection, origin, ..
-            }) => {
-                self.tool = Tool::MovingRect(MoveState {
-                    selection: *selection,
-                    origin: *origin,
-                    move_pos: corner2,
-                })
-            }
-            Tool::MovingLineSegment(MoveLineSegment {
-                line,
-                segment,
-                origin,
-                ..
-            }) => {
-                self.tool = Tool::MovingLineSegment(MoveLineSegment {
-                    line: line.clone(),
-                    segment: *segment,
-                    origin: *origin,
-                    move_pos: corner2,
-                })
-            }
             _ => {}
         }
     }
     fn on_drag_stop(&mut self, corner2: TextCoordinate) {
         match &self.tool {
-            Tool::Rect(Some(rect)) => {
-                let text_box = Rectangle::new(rect.corner_1, corner2);
-                if !text_box.is_empty() {
-                    self.rects.push(text_box);
-                }
-                self.tool = Tool::Selection(None);
-            }
             Tool::Selection(Some(corner1)) => {
                 let selection = Rectangle::new(*corner1, corner2);
                 self.selected_text = self.text.clone();
@@ -692,33 +554,15 @@ impl MyApp {
                 origin,
                 move_pos,
             }) => {
+                let mut swap_buf = TextBuffer::new(self.num_rows, self.num_cols);
                 for pos in selection.iter_interior() {
                     let selection = self.selected_text.get(pos);
                     let new_pos = pos.shifted(*origin, *move_pos);
-                    self.text.set_text(&new_pos, selection);
+                    swap_buf.set_text(&new_pos, selection);
                 }
-                self.selected_text.clear_all();
-                self.tool = Tool::Selection(None)
-            }
-            Tool::MovingRect(MoveState {
-                selection,
-                origin,
-                move_pos,
-            }) => {
-                let new_rect = selection.shifted(*origin, *move_pos);
-                if !new_rect.is_empty() {
-                    self.rects.push(new_rect);
-                }
-                self.tool = Tool::Selection(None)
-            }
-            Tool::MovingLineSegment(MoveLineSegment {
-                line,
-                segment,
-                origin,
-                move_pos,
-            }) => {
-                self.lines.push(line.shifted(*segment, origin, move_pos));
-                self.tool = Tool::Selection(None)
+                let selection_shifted = selection.shifted(*origin, *move_pos);
+                self.selected_text = swap_buf;
+                self.tool = Tool::Selected(selection_shifted);
             }
             _ => {}
         }
@@ -731,11 +575,6 @@ impl MyApp {
                     cursor: pos,
                 }))
             }
-            Tool::Polyline(state) => {
-                let mut state = state.clone();
-                state.anchors.extend(pos);
-                self.tool = Tool::Polyline(state);
-            }
             Tool::Selected(selection_box) => {
                 for pos in selection_box.iter_interior() {
                     let selection = self.selected_text.get(pos);
@@ -745,27 +584,10 @@ impl MyApp {
                 self.tool = Tool::Selection(None);
             }
             Tool::Selection(None) => {
-                if let Some((ndx, line)) = self
-                    .lines
-                    .iter()
-                    .enumerate()
-                    .find_map(|(ndx, l)| l.anchored_by(pos).map(|l| (ndx, l)))
-                {
-                    self.lines.remove(ndx);
-                    self.tool = Tool::Polyline(LineState {
-                        anchors: line,
-                        cursor: Some(pos),
-                    });
-                } else {
-                    self.tool = Tool::Text(Some(TextState {
-                        origin: pos,
-                        cursor: pos,
-                    }));
-                }
-            }
-            Tool::MovingLineSegment(state) => {
-                self.lines.push(state.line.clone());
-                self.tool = Tool::Selection(None);
+                self.tool = Tool::Text(Some(TextState {
+                    origin: pos,
+                    cursor: pos,
+                }));
             }
             _ => {}
         }
@@ -863,12 +685,15 @@ impl MyApp {
                 self.on_action_with_text(*text_state, action);
             }
             Tool::Selection(None) => match action {
-                Action::Char('r') => self.tool = Tool::Rect(None),
                 Action::Char('t') => self.tool = Tool::Text(None),
-                Action::Char('w') => self.tool = Tool::Polyline(LineState::default()),
                 Action::Copy => {
                     eprintln!("Copy of buffer");
                     self.copy_buffer = Some(self.text.render());
+                }
+                Action::Paste(txt) => {
+                    let hover_pos = self.hover_pos.unwrap_or_default();
+                    let rect = self.selected_text.paste(&txt, hover_pos);
+                    self.tool = Tool::Selected(rect);
                 }
                 _ => {}
             },
@@ -876,311 +701,242 @@ impl MyApp {
                 let selection = self.selected_text.window(rect);
                 self.copy_buffer = Some(selection.render());
             }
-            Tool::Polyline(state) => {
-                if action == Action::Escape {
-                    if !state.anchors.is_empty() {
-                        self.lines.push(state.anchors.clone());
-                    }
-                    self.tool = Tool::Selection(None)
+            Tool::Selected(rect) if action == Action::Escape => {
+                for pos in rect.iter_interior() {
+                    let selection = self.selected_text.get(pos);
+                    self.text.set_text(&pos, selection);
                 }
+                self.selected_text.clear_all();
+                self.tool = Tool::Selection(None);
             }
-            Tool::MovingRect(state) if action == Action::Escape => {
-                self.rects.push(state.selection);
-                self.tool = Tool::Selection(None)
+            Tool::Selected(_) if action == Action::Backspace => {
+                self.selected_text.clear_all();
+                self.tool = Tool::Selection(None);
             }
             _ if action == Action::Escape => self.tool = Tool::Selection(None),
             _ => {}
         }
     }
-    fn on_hover(&mut self, tc: TextCoordinate, canvas: &Rect, painter: &Painter) {
-        let delta_x = canvas.width() / self.num_cols as f32;
-        let delta_y = canvas.height() / self.num_rows as f32;
-        let delta_r = delta_x.min(delta_y);
-        match &mut self.tool {
-            Tool::Polyline(state) => {
-                state.cursor = Some(tc);
-            }
-            Tool::Selection(None) => {
-                if let Some(highlighted_rect) = self.rects.iter().find_map(|x| x.controlled_by(tc))
-                {
-                    let rect = self.map_rectangle_to_rect(canvas, &highlighted_rect);
-                    painter.rect_stroke(
-                        rect,
-                        1.0,
-                        (3.0, Color32::LIGHT_GREEN.linear_multiply(0.2)),
-                        egui::StrokeKind::Middle,
-                    );
-                    for corner in highlighted_rect.iter_corners() {
-                        let center = self.map_text_coordinate_to_cell_center(canvas, &corner);
-                        painter.circle_filled(
-                            center,
-                            delta_r,
-                            Color32::LIGHT_GREEN.linear_multiply(0.5),
-                        );
-                    }
-                } else if let Some(highlighted_rect) = self.rects.iter().find(|x| x.on_boundary(tc))
-                {
-                    let rect = self.map_rectangle_to_rect(canvas, highlighted_rect);
-                    painter.rect_stroke(
-                        rect,
-                        1.0,
-                        (3.0, Color32::LIGHT_GREEN.linear_multiply(0.2)),
-                        egui::StrokeKind::Middle,
-                    );
-                } else if let Some(polyline) = self.lines.iter().find_map(|x| x.anchored_by(tc)) {
-                    let pos = self.map_text_coordinate_to_cell_center(canvas, &tc);
-                    painter.circle_filled(pos, delta_r, Color32::LIGHT_GREEN.linear_multiply(0.2));
-                } else if let Some(polyline) = self
-                    .lines
-                    .iter()
-                    .find(|x| x.edges().any(|e| e.on_boundary(tc)))
-                {
-                    let points = polyline
-                        .anchors()
-                        .map(|x| self.map_text_coordinate_to_cell_center(canvas, x))
-                        .collect();
-                    painter.line(points, (1.0, Color32::LIGHT_GREEN.linear_multiply(0.5)));
-                }
-            }
-            _ => {}
-        }
+    fn on_hover(&mut self, tc: Option<TextCoordinate>) {
+        self.hover_pos = tc;
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                //ui.label(format!("{:?}", self.tool));
-                let desired_size = ui.available_size();
-                let (resp, painter) = ui.allocate_painter(desired_size, Sense::click_and_drag());
-                let canvas = resp.rect;
-                let delta_x = desired_size.x / self.num_cols as f32;
-                let delta_y = desired_size.y / self.num_rows as f32;
-                let top_left = canvas.left_top();
-                for column in 0..=self.num_cols {
-                    let col_x = column as f32 * delta_x;
-                    let p0 = top_left + vec2(col_x, 0.0);
-                    let p1 = top_left + vec2(col_x, canvas.height());
-                    painter.line(
-                        vec![p0, p1],
-                        PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
-                    );
+            ui.vertical(|ui| {
+                if ui.button("⚙").clicked() {
+                    self.resize = Some(Resize {
+                        num_cols: self.num_cols,
+                        num_rows: self.num_rows,
+                    });
                 }
-                for row in 0..=self.num_rows {
-                    let row_y = row as f32 * delta_y;
-                    let p0 = top_left + vec2(0.0, row_y);
-                    let p1 = top_left + vec2(canvas.width(), row_y);
-                    painter.line(
-                        vec![p0, p1],
-                        PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
-                    );
-                }
-                for rect in &self.rects {
-                    let rect = self.map_rectangle_to_rect(&canvas, rect);
-                    painter.rect_stroke(
-                        rect,
-                        1.0,
-                        (1.0, Color32::LIGHT_BLUE),
-                        egui::StrokeKind::Middle,
-                    );
-                }
-                for line in &self.lines {
-                    let points = line
-                        .anchors()
-                        .map(|t| self.map_text_coordinate_to_cell_center(&canvas, t))
-                        .collect::<Vec<_>>();
-                    painter.line(points, (1.0, Color32::LIGHT_BLUE));
-                }
-                for (coord, ch) in self.text.iter() {
-                    let center = self.map_text_coordinate_to_cell_center(&canvas, &coord);
-                    let monospace = FontId::monospace(10.0);
-                    painter.text(
-                        center,
-                        Align2::CENTER_CENTER,
-                        ch,
-                        monospace,
-                        Color32::WHITE.linear_multiply(0.7),
-                    );
-                }
-                if let Some(pos) = resp.hover_pos() {
-                    if let Some(text_coordinate) = self.map_pos_to_coords(&canvas, pos) {
-                        let col = text_coordinate.x as f32;
-                        let row = text_coordinate.y as f32;
-                        let top_left_corner = top_left + vec2(col * delta_x, row * delta_y);
-                        let bottom_right_corner = top_left_corner + vec2(delta_x, delta_y);
-                        painter.rect_filled(
-                            Rect::from_two_pos(top_left_corner, bottom_right_corner),
-                            1.0,
-                            Color32::LIGHT_BLUE.linear_multiply(0.3),
+                if let Some(mut resize) = self.resize.take() {
+                    let mut should_close = false;
+                    let mut should_apply = false;
+                    let modal = egui::containers::Modal::new("Resize".into());
+                    modal.show(ui.ctx(), |ui| {
+                        ui.label("Resize canvas");
+                        egui::Grid::new("resize")
+                            .num_columns(2)
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.label("Width");
+                                ui.add(DragValue::new(&mut resize.num_cols));
+                                ui.end_row();
+                                ui.label("Height");
+                                ui.add(DragValue::new(&mut resize.num_rows));
+                                ui.end_row();
+                            });
+
+                        egui::Sides::new().show(
+                            ui,
+                            |_ui| {},
+                            |ui| {
+                                if ui.button("Cancel").clicked() {
+                                    should_close = true;
+                                }
+                                if ui.button("Apply").clicked() {
+                                    should_apply = true;
+                                    should_close = true;
+                                }
+                            },
                         );
-                        self.on_hover(text_coordinate, &canvas, &painter);
+                    });
+                    if should_close {
+                        if should_apply {
+                            self.num_cols = resize.num_cols;
+                            self.num_rows = resize.num_rows;
+                            self.text = self.text.resize(resize);
+                        }
+                        self.resize = None;
+                    } else {
+                        self.resize = Some(resize);
                     }
-                }
-                if let Some(pos) = resp.interact_pointer_pos() {
-                    if let Some(text_coordinate) = self.map_pos_to_coords(&canvas, pos) {
-                        if resp.drag_started() {
-                            self.on_drag_start(text_coordinate);
-                        } else if resp.dragged() {
-                            self.on_drag(text_coordinate, &canvas, &painter);
-                        } else if resp.drag_stopped() {
-                            self.on_drag_stop(text_coordinate);
-                        } else if resp.clicked() {
-                            self.on_click(text_coordinate);
+                };
+                egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+                    //ui.label(format!("{:?}", self.tool));
+                    let desired_size = ui.available_size();
+                    let (resp, painter) =
+                        ui.allocate_painter(desired_size, Sense::click_and_drag());
+                    let canvas = resp.rect;
+                    let delta_x = desired_size.x / self.num_cols as f32;
+                    let delta_y = desired_size.y / self.num_rows as f32;
+                    let top_left = canvas.left_top();
+                    for column in 0..=self.num_cols {
+                        let col_x = column as f32 * delta_x;
+                        let p0 = top_left + vec2(col_x, 0.0);
+                        let p1 = top_left + vec2(col_x, canvas.height());
+                        painter.line(
+                            vec![p0, p1],
+                            PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
+                        );
+                    }
+                    for row in 0..=self.num_rows {
+                        let row_y = row as f32 * delta_y;
+                        let p0 = top_left + vec2(0.0, row_y);
+                        let p1 = top_left + vec2(canvas.width(), row_y);
+                        painter.line(
+                            vec![p0, p1],
+                            PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
+                        );
+                    }
+                    for (coord, ch) in self.text.iter() {
+                        let center = self.map_text_coordinate_to_cell_center(&canvas, &coord);
+                        let monospace = FontId::monospace(10.0);
+                        painter.text(
+                            center,
+                            Align2::CENTER_CENTER,
+                            ch,
+                            monospace,
+                            Color32::WHITE.linear_multiply(0.7),
+                        );
+                    }
+                    if let Some(pos) = resp.hover_pos() {
+                        if let Some(text_coordinate) = self.map_pos_to_coords(&canvas, pos) {
+                            let col = text_coordinate.x as f32;
+                            let row = text_coordinate.y as f32;
+                            let top_left_corner = top_left + vec2(col * delta_x, row * delta_y);
+                            let bottom_right_corner = top_left_corner + vec2(delta_x, delta_y);
+                            painter.rect_filled(
+                                Rect::from_two_pos(top_left_corner, bottom_right_corner),
+                                1.0,
+                                Color32::LIGHT_BLUE.linear_multiply(0.3),
+                            );
+                            self.on_hover(Some(text_coordinate));
                         } else {
-                            self.on_interact(text_coordinate);
+                            self.on_hover(None);
                         }
                     }
-                }
-                if let Some(action) = ui.input(|i| {
-                    i.events.iter().find_map(|x| match x {
-                        Event::Text(string) => {
-                            if string.len() == 1 {
-                                Some(Action::Char(string.chars().nth(0).unwrap()))
+                    if let Some(pos) = resp.interact_pointer_pos() {
+                        if let Some(text_coordinate) = self.map_pos_to_coords(&canvas, pos) {
+                            if resp.drag_started() {
+                                self.on_drag_start(text_coordinate);
+                            } else if resp.dragged() {
+                                self.on_drag(text_coordinate, &canvas, &painter);
+                            } else if resp.drag_stopped() {
+                                self.on_drag_stop(text_coordinate);
+                            } else if resp.clicked() {
+                                self.on_click(text_coordinate);
                             } else {
-                                None
+                                self.on_interact(text_coordinate);
                             }
                         }
-                        Event::Key {
-                            key,
-                            pressed: true,
-                            modifiers,
-                            ..
-                        } => map_key(key, modifiers),
-                        Event::Paste(string) => Some(Action::Paste(string.clone())),
-                        Event::Copy => Some(Action::Copy),
-                        _ => None,
-                    })
-                }) {
-                    self.on_action(action);
-                }
-                if let Tool::Rect(Some(text_box)) = self.tool {
-                    let rect = self.map_rectangle_to_rect(&canvas, &text_box);
-                    painter.rect_stroke(
-                        rect,
-                        1.0,
-                        Stroke::new(1.0, Color32::WHITE),
-                        egui::StrokeKind::Middle,
-                    );
-                }
-                if let Tool::Text(Some(TextState { origin, cursor })) = self.tool {
-                    let center = self.map_text_coordinate_to_cell_center(&canvas, &cursor);
-                    let rect = Rect::from_center_size(center, vec2(delta_x, delta_y));
-                    painter.rect_stroke(
-                        rect,
-                        0.5,
-                        (1.0, Color32::LIGHT_YELLOW),
-                        egui::StrokeKind::Middle,
-                    );
-                }
-                if let Tool::Selected(selection_box) = self.tool {
-                    let rect = self.map_rectangle_to_rect(&canvas, &selection_box);
-                    let rect = rect.expand2(vec2(delta_x / 2.0, delta_y / 2.0));
-                    for (coord, ch) in self.selected_text.iter() {
-                        if selection_box.contains(&coord) {
-                            let center = self.map_text_coordinate_to_cell_center(&canvas, &coord);
-                            let monospace = FontId::monospace(10.0);
-                            painter.text(
-                                center,
-                                Align2::CENTER_CENTER,
-                                ch,
-                                monospace,
-                                Color32::GREEN.linear_multiply(0.5),
-                            );
+                    }
+                    if let Some(action) = ui.input(|i| {
+                        i.events.iter().find_map(|x| match x {
+                            Event::Text(string) => {
+                                if string.len() == 1 {
+                                    Some(Action::Char(string.chars().nth(0).unwrap()))
+                                } else {
+                                    None
+                                }
+                            }
+                            Event::Key {
+                                key,
+                                pressed: true,
+                                modifiers,
+                                ..
+                            } => map_key(key, modifiers),
+                            Event::Paste(string) => Some(Action::Paste(string.clone())),
+                            Event::Copy => Some(Action::Copy),
+                            _ => None,
+                        })
+                    }) {
+                        self.on_action(action);
+                    }
+                    if let Tool::Text(Some(TextState { origin, cursor })) = self.tool {
+                        let center = self.map_text_coordinate_to_cell_center(&canvas, &cursor);
+                        let rect = Rect::from_center_size(center, vec2(delta_x, delta_y));
+                        painter.rect_stroke(
+                            rect,
+                            0.5,
+                            (1.0, Color32::LIGHT_YELLOW),
+                            egui::StrokeKind::Middle,
+                        );
+                    }
+                    if let Tool::Selected(selection_box) = self.tool {
+                        let rect = self.map_rectangle_to_rect(&canvas, &selection_box);
+                        let rect = rect.expand2(vec2(delta_x / 2.0, delta_y / 2.0));
+                        for (coord, ch) in self.selected_text.iter() {
+                            if selection_box.contains(&coord) {
+                                let center =
+                                    self.map_text_coordinate_to_cell_center(&canvas, &coord);
+                                let monospace = FontId::monospace(10.0);
+                                painter.text(
+                                    center,
+                                    Align2::CENTER_CENTER,
+                                    ch,
+                                    monospace,
+                                    Color32::GREEN.linear_multiply(0.5),
+                                );
+                            }
                         }
                     }
-                }
-                if let Tool::Polyline(state) = &self.tool {
-                    if let Some(last_pos) = state.anchors.last() {
-                        if let Some(cursor) = state.cursor {
-                            let cursor = cursor.perp_align(*last_pos);
-                            let cursor = self.map_text_coordinate_to_cell_center(&canvas, &cursor);
-                            let points = state
-                                .anchors
-                                .anchors()
-                                .map(|x| self.map_text_coordinate_to_cell_center(&canvas, x))
-                                .chain(std::iter::once(cursor))
-                                .collect();
-                            painter.line(points, (1.0, Color32::LIGHT_RED));
+                    if let Tool::MovingText(MoveState {
+                        selection,
+                        origin,
+                        move_pos,
+                    }) = self.tool
+                    {
+                        let bbox_shifted = selection.shifted(origin, move_pos);
+                        for (coord, ch) in self.selected_text.iter() {
+                            let coord = coord.shifted(origin, move_pos);
+                            if bbox_shifted.contains(&coord) {
+                                let center =
+                                    self.map_text_coordinate_to_cell_center(&canvas, &coord);
+                                let monospace = FontId::monospace(10.0);
+                                painter.text(
+                                    center,
+                                    Align2::CENTER_CENTER,
+                                    ch,
+                                    monospace,
+                                    Color32::GREEN,
+                                );
+                            }
                         }
                     }
-                }
-                if let Tool::MovingText(MoveState {
-                    selection,
-                    origin,
-                    move_pos,
-                }) = self.tool
-                {
-                    let bbox_shifted = selection.shifted(origin, move_pos);
-                    for (coord, ch) in self.selected_text.iter() {
-                        let coord = coord.shifted(origin, move_pos);
-                        if bbox_shifted.contains(&coord) {
-                            let center = self.map_text_coordinate_to_cell_center(&canvas, &coord);
-                            let monospace = FontId::monospace(10.0);
-                            painter.text(
-                                center,
-                                Align2::CENTER_CENTER,
-                                ch,
-                                monospace,
-                                Color32::GREEN,
-                            );
-                        }
+                });
+                match &self.tool {
+                    Tool::Text(_) => {
+                        ctx.set_cursor_icon(CursorIcon::Text);
+                    }
+                    Tool::Selected(..) => {
+                        ctx.set_cursor_icon(CursorIcon::Grab);
+                    }
+                    Tool::MovingText(..) => {
+                        ctx.set_cursor_icon(CursorIcon::Grabbing);
+                    }
+                    _ => {
+                        ctx.set_cursor_icon(CursorIcon::Default);
                     }
                 }
-                if let Tool::MovingRect(MoveState {
-                    selection,
-                    origin,
-                    move_pos,
-                }) = self.tool
-                {
-                    let bbox_shifted = selection.shifted(origin, move_pos);
-                    painter.rect_stroke(
-                        self.map_rectangle_to_rect(&canvas, &bbox_shifted),
-                        1.0,
-                        (1.0, Color32::LIGHT_GREEN),
-                        egui::StrokeKind::Middle,
-                    );
+                if let Some(txt) = std::mem::take(&mut self.copy_buffer) {
+                    ctx.copy_text(txt);
                 }
-                if let Tool::MovingLineSegment(MoveLineSegment {
-                    line,
-                    segment,
-                    origin,
-                    move_pos,
-                }) = &self.tool
-                {
-                    let line = line.shifted(*segment, origin, move_pos);
-                    let points = line
-                        .anchors()
-                        .map(|x| self.map_text_coordinate_to_cell_center(&canvas, x))
-                        .collect();
-                    painter.line(points, (1.0, Color32::LIGHT_GREEN));
-                    if let Some(edge) = line.edge(*segment) {
-                        let start = self.map_text_coordinate_to_cell_center(&canvas, &edge.start);
-                        let end = self.map_text_coordinate_to_cell_center(&canvas, &edge.stop);
-                        painter.line_segment([start, end], (3.0, Color32::LIGHT_GREEN));
-                    }
-                }
-            });
-            match &self.tool {
-                Tool::Rect(_) | Tool::Polyline(_) => {
-                    ctx.set_cursor_icon(CursorIcon::Crosshair);
-                }
-                Tool::Text(_) => {
-                    ctx.set_cursor_icon(CursorIcon::Text);
-                }
-                Tool::Selected(..) => {
-                    ctx.set_cursor_icon(CursorIcon::Grab);
-                }
-                Tool::MovingText(..) | Tool::MovingRect(..) | Tool::MovingLineSegment(..) => {
-                    ctx.set_cursor_icon(CursorIcon::Grabbing);
-                }
-                _ => {
-                    ctx.set_cursor_icon(CursorIcon::Default);
-                }
-            }
-            if let Some(txt) = std::mem::take(&mut self.copy_buffer) {
-                ctx.copy_text(txt);
-            }
+            })
         });
     }
 }
