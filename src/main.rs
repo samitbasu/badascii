@@ -2,9 +2,9 @@
 #![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
 // Needs:
-// Undo Redo
-// Variable canvas size
 // SVG export - maybe with roughr
+
+use std::collections::VecDeque;
 
 /**
  *      .----
@@ -35,10 +35,10 @@
  *
  *  When pasting, extract pins from the symbol?
  */
-use eframe::{egui, glow::COLOR_RENDERABLE};
+use eframe::egui;
 use egui::{
-    Align2, Color32, CursorIcon, DragValue, Event, EventFilter, FontId, Key, Modifiers, Painter,
-    Pos2, Rect, Response, Sense, Stroke, UiBuilder, epaint::PathStroke, pos2, text, vec2,
+    Align2, Button, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers, Painter, Pos2,
+    Rect, Sense, epaint::PathStroke, vec2,
 };
 
 fn main() -> eframe::Result {
@@ -57,6 +57,11 @@ fn main() -> eframe::Result {
             Ok(Box::<MyApp>::default())
         }),
     )
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum Shape {
+    Rectangle(Rect),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
@@ -99,22 +104,6 @@ impl TextCoordinate {
             y: self.y.saturating_add_signed(delta_y),
         }
     }
-
-    fn perp_align(self, last_pos: TextCoordinate) -> TextCoordinate {
-        let delta_x = self.x as i32 - last_pos.x as i32;
-        let delta_y = self.y as i32 - last_pos.y as i32;
-        if delta_x.abs() < delta_y.abs() {
-            Self {
-                x: last_pos.x,
-                y: self.y,
-            }
-        } else {
-            Self {
-                x: self.x,
-                y: last_pos.y,
-            }
-        }
-    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -145,9 +134,6 @@ struct Rectangle {
 }
 
 impl Rectangle {
-    fn is_empty(&self) -> bool {
-        (self.corner_1.x == self.corner_2.x) || (self.corner_1.y == self.corner_2.y)
-    }
     fn new(corner_1: TextCoordinate, corner_2: TextCoordinate) -> Rectangle {
         Rectangle { corner_1, corner_2 }
     }
@@ -172,61 +158,6 @@ impl Rectangle {
         let min_y = self.corner_1.y.min(self.corner_2.y);
         let max_y = self.corner_1.y.max(self.corner_2.y);
         (min_y..=max_y).flat_map(move |y| (min_x..=max_x).map(move |x| TextCoordinate { x, y }))
-    }
-
-    fn iter_corners(&self) -> impl Iterator<Item = TextCoordinate> {
-        let min_x = self.corner_1.x.min(self.corner_2.x);
-        let max_x = self.corner_1.x.max(self.corner_2.x);
-        let min_y = self.corner_1.y.min(self.corner_2.y);
-        let max_y = self.corner_1.y.max(self.corner_2.y);
-        [
-            TextCoordinate { x: min_x, y: min_y },
-            TextCoordinate { x: max_x, y: min_y },
-            TextCoordinate { x: max_x, y: max_y },
-            TextCoordinate { x: min_x, y: max_y },
-        ]
-        .into_iter()
-    }
-
-    fn on_boundary(&self, tc: TextCoordinate) -> bool {
-        let min_x = self.corner_1.x.min(self.corner_2.x);
-        let max_x = self.corner_1.x.max(self.corner_2.x);
-        let min_y = self.corner_1.y.min(self.corner_2.y);
-        let max_y = self.corner_1.y.max(self.corner_2.y);
-        ((tc.x == self.corner_1.x || tc.x == self.corner_2.x) && (min_y..=max_y).contains(&tc.y))
-            || ((tc.y == self.corner_1.y || tc.y == self.corner_2.y)
-                && (min_x..=max_x).contains(&tc.x))
-    }
-
-    fn controlled_by(&self, tc: TextCoordinate) -> Option<Rectangle> {
-        if tc == self.corner_1 {
-            return Some(Rectangle {
-                corner_1: self.corner_2,
-                corner_2: tc,
-            });
-        }
-        if tc == self.corner_2 {
-            return Some(*self);
-        }
-        if tc.x == self.corner_1.x && tc.y == self.corner_2.y {
-            return Some(Rectangle {
-                corner_1: TextCoordinate {
-                    x: self.corner_2.x,
-                    y: self.corner_1.y,
-                },
-                corner_2: TextCoordinate { x: tc.x, y: tc.y },
-            });
-        }
-        if tc.x == self.corner_2.x && tc.y == self.corner_1.y {
-            return Some(Rectangle {
-                corner_1: TextCoordinate {
-                    x: self.corner_1.x,
-                    y: self.corner_2.y,
-                },
-                corner_2: tc,
-            });
-        }
-        None
     }
 
     fn height(&self) -> u32 {
@@ -391,31 +322,24 @@ impl TextBuffer {
     }
 }
 
-struct Edge {
-    start: TextCoordinate,
-    stop: TextCoordinate,
-    index: usize,
-}
-
-impl Edge {
-    fn on_boundary(&self, tc: TextCoordinate) -> bool {
-        Rectangle {
-            corner_1: self.start,
-            corner_2: self.stop,
-        }
-        .on_boundary(tc)
-    }
-}
-
 struct Resize {
     num_rows: u32,
     num_cols: u32,
+}
+
+#[derive(Clone)]
+struct Snapshot {
+    text: TextBuffer,
+    selected_text: TextBuffer,
+    tool: Tool,
 }
 
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
     tool: Tool,
+    snapshots: VecDeque<Snapshot>,
+    futures: Vec<Snapshot>,
     selected_text: TextBuffer,
     text: TextBuffer,
     copy_buffer: Option<String>,
@@ -442,6 +366,8 @@ impl Default for MyApp {
         let mut text = TextBuffer::new(num_rows, num_cols);
         text.paste(INITIAL_TEXT, TextCoordinate { x: 20, y: 5 });
         Self {
+            snapshots: VecDeque::with_capacity(100),
+            futures: Vec::new(),
             num_rows,
             num_cols,
             tool: Tool::Selection(None),
@@ -484,17 +410,21 @@ impl MyApp {
         let corner_2 = self.map_text_coordinate_to_cell_center(canvas, &rect.corner_2);
         Rect::from_two_pos(corner_1, corner_2)
     }
+    fn snapshot(&mut self) {
+        while self.snapshots.len() >= 100 {
+            self.snapshots.pop_front();
+        }
+        self.snapshots.push_back(Snapshot {
+            text: self.text.clone(),
+            selected_text: self.selected_text.clone(),
+            tool: self.tool.clone(),
+        });
+    }
     fn set_text(&mut self, ch: char, position: &TextCoordinate) {
         self.text.set_text(position, Some(ch));
     }
     fn clear_text(&mut self, position: &TextCoordinate) {
         self.text.set_text(position, None);
-    }
-    fn on_interact(&mut self, tc: TextCoordinate) {
-        match &self.tool {
-            Tool::Selection(None) => {}
-            _ => (),
-        }
     }
     fn on_drag_start(&mut self, tc: TextCoordinate) {
         match &self.tool {
@@ -545,6 +475,7 @@ impl MyApp {
         match &self.tool {
             Tool::Selection(Some(corner1)) => {
                 let selection = Rectangle::new(*corner1, corner2);
+                self.snapshot();
                 self.selected_text = self.text.clone();
                 self.text.clear_rectangle(selection);
                 self.tool = Tool::Selected(selection);
@@ -561,6 +492,7 @@ impl MyApp {
                     swap_buf.set_text(&new_pos, selection);
                 }
                 let selection_shifted = selection.shifted(*origin, *move_pos);
+                self.snapshot();
                 self.selected_text = swap_buf;
                 self.tool = Tool::Selected(selection_shifted);
             }
@@ -570,12 +502,15 @@ impl MyApp {
     fn on_click(&mut self, pos: TextCoordinate) {
         match &self.tool {
             Tool::Text(_) => {
+                self.snapshot();
                 self.tool = Tool::Text(Some(TextState {
                     origin: pos,
                     cursor: pos,
                 }))
             }
             Tool::Selected(selection_box) => {
+                let selection_box = *selection_box;
+                self.snapshot();
                 for pos in selection_box.iter_interior() {
                     let selection = self.selected_text.get(pos);
                     self.text.set_text(&pos, selection);
@@ -691,6 +626,7 @@ impl MyApp {
                     self.copy_buffer = Some(self.text.render());
                 }
                 Action::Paste(txt) => {
+                    self.snapshot();
                     let hover_pos = self.hover_pos.unwrap_or_default();
                     let rect = self.selected_text.paste(&txt, hover_pos);
                     self.tool = Tool::Selected(rect);
@@ -720,18 +656,48 @@ impl MyApp {
     fn on_hover(&mut self, tc: Option<TextCoordinate>) {
         self.hover_pos = tc;
     }
+    fn undo(&mut self) {
+        if let Some(buf) = self.snapshots.pop_back() {
+            self.futures.push(buf.clone());
+            self.text = buf.text;
+            self.selected_text = buf.selected_text;
+            self.tool = buf.tool;
+        }
+    }
+    fn redo(&mut self) {
+        if let Some(buf) = self.futures.pop() {
+            self.snapshots.push_back(buf.clone());
+            self.text = buf.text;
+            self.selected_text = buf.selected_text;
+            self.tool = buf.tool;
+        }
+    }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
-                if ui.button("⚙").clicked() {
-                    self.resize = Some(Resize {
-                        num_cols: self.num_cols,
-                        num_rows: self.num_rows,
-                    });
-                }
+                ui.horizontal(|ui| {
+                    if ui.button("⚙").clicked() {
+                        self.resize = Some(Resize {
+                            num_cols: self.num_cols,
+                            num_rows: self.num_rows,
+                        });
+                    }
+                    if ui
+                        .add_enabled(!self.snapshots.is_empty(), Button::new("Undo"))
+                        .clicked()
+                    {
+                        self.undo();
+                    }
+                    if ui
+                        .add_enabled(!self.futures.is_empty(), Button::new("Redo"))
+                        .clicked()
+                    {
+                        self.redo();
+                    }
+                });
                 if let Some(mut resize) = self.resize.take() {
                     let mut should_close = false;
                     let mut should_apply = false;
@@ -840,8 +806,6 @@ impl eframe::App for MyApp {
                                 self.on_drag_stop(text_coordinate);
                             } else if resp.clicked() {
                                 self.on_click(text_coordinate);
-                            } else {
-                                self.on_interact(text_coordinate);
                             }
                         }
                     }
@@ -867,7 +831,7 @@ impl eframe::App for MyApp {
                     }) {
                         self.on_action(action);
                     }
-                    if let Tool::Text(Some(TextState { origin, cursor })) = self.tool {
+                    if let Tool::Text(Some(TextState { origin: _, cursor })) = self.tool {
                         let center = self.map_text_coordinate_to_cell_center(&canvas, &cursor);
                         let rect = Rect::from_center_size(center, vec2(delta_x, delta_y));
                         painter.rect_stroke(
@@ -878,8 +842,6 @@ impl eframe::App for MyApp {
                         );
                     }
                     if let Tool::Selected(selection_box) = self.tool {
-                        let rect = self.map_rectangle_to_rect(&canvas, &selection_box);
-                        let rect = rect.expand2(vec2(delta_x / 2.0, delta_y / 2.0));
                         for (coord, ch) in self.selected_text.iter() {
                             if selection_box.contains(&coord) {
                                 let center =
