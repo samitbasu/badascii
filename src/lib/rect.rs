@@ -61,4 +61,26 @@ impl Rectangle {
             corner_2: TextCoordinate { x: max_x, y: max_y },
         }
     }
+    pub fn left_top(&self) -> TextCoordinate {
+        let me = self.normalize();
+        me.corner_1
+    }
+    pub fn right_bottom(&self) -> TextCoordinate {
+        let me = self.normalize();
+        me.corner_2
+    }
+    pub fn left_bottom(&self) -> TextCoordinate {
+        let me = self.normalize();
+        TextCoordinate {
+            x: me.corner_1.x,
+            y: me.corner_2.y,
+        }
+    }
+    pub fn right_top(&self) -> TextCoordinate {
+        let me = self.normalize();
+        TextCoordinate {
+            x: me.corner_2.x,
+            y: me.corner_1.y,
+        }
+    }
 }

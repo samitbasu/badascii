@@ -47,9 +47,9 @@ use egui::{
     pos2, vec2,
 };
 use lib::{Resize, action::Action, analyze::get_rectangles, text_buffer::TextBuffer};
-use rand::SeedableRng;
+use rand::{SeedableRng, rngs::StdRng};
 use roughr::{
-    core::{OpSet, OpType, Options},
+    core::{OpSet, OpType, Options, OptionsBuilder},
     generator,
     geometry::BezierCubic,
 };
@@ -129,6 +129,7 @@ struct MyApp {
     copy_buffer: Option<String>,
     hover_pos: Option<TextCoordinate>,
     resize: Option<Resize>,
+    rand_pool: Vec<StdRng>,
 }
 
 const INITIAL_TEXT: &str = "
@@ -149,6 +150,14 @@ impl Default for MyApp {
         let num_cols = 100;
         let mut text = TextBuffer::new(num_rows, num_cols);
         text.paste(INITIAL_TEXT, TextCoordinate { x: 20, y: 5 });
+        let seed = [
+            1, 0, 0, 0, 23, 0, 0, 0, 200, 1, 0, 0, 210, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+        ];
+        let mut parent = rand::rngs::StdRng::from_seed(seed);
+        let rand_pool = (0..8)
+            .map(|_| StdRng::from_rng(&mut parent).unwrap())
+            .collect::<Vec<_>>();
         Self {
             snapshots: VecDeque::with_capacity(100),
             futures: Vec::new(),
@@ -160,6 +169,7 @@ impl Default for MyApp {
             copy_buffer: None,
             hover_pos: None,
             resize: None,
+            rand_pool,
         }
     }
 }
@@ -676,15 +686,13 @@ impl eframe::App for MyApp {
                      */
                     let rectangles = get_rectangles(&self.text);
                     let top_left = canvas_right.left_top();
-                    let mut opt = Options::default();
-                    let seed = [
-                        1, 0, 0, 0, 23, 0, 0, 0, 200, 1, 0, 0, 210, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    ];
-                    opt.randomizer = Some(rand::rngs::StdRng::from_seed(seed));
-                    let options = Some(opt);
-                    for rectangle in rectangles {
+                    for rectangle in rectangles.iter() {
                         let generator = generator::Generator::default();
+                        let id =
+                            (egui::util::hash(rectangle) % self.rand_pool.len() as u64) as usize;
+                        let mut options = OptionsBuilder::default();
+                        options.randomizer(self.rand_pool[id].clone());
+                        let options = Some(options.build().unwrap());
                         let corner_1 = rectangle.corner_1;
                         let corner_2 = rectangle.corner_2;
                         let p0 = top_left

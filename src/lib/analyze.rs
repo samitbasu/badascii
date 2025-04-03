@@ -8,6 +8,10 @@ pub struct LineSegment {
     pub end: TextCoordinate,
 }
 
+fn line_segment(start: TextCoordinate, end: TextCoordinate) -> LineSegment {
+    LineSegment { start, end }
+}
+
 enum State {
     Blank,
     Tracking(LineSegment),
@@ -37,24 +41,42 @@ fn classify(ch: char) -> Option<Class> {
     }
 }
 
+// We apply the constraint that for horizontal lines,
+// that the start is to the left of end
+fn mk_horiz(ls: LineSegment) -> DirectedLine {
+    assert_eq!(ls.end.y, ls.start.y);
+    let y = ls.end.y;
+    let min_x = ls.start.x.min(ls.end.x);
+    let max_x = ls.start.x.max(ls.end.x);
+    DirectedLine::Horiz(LineSegment {
+        start: TextCoordinate { x: min_x, y },
+        end: TextCoordinate { x: max_x, y },
+    })
+}
+
+fn mk_vert(ls: LineSegment) -> DirectedLine {
+    assert_eq!(ls.end.x, ls.start.x);
+    let x = ls.end.x;
+    let min_y = ls.start.y.min(ls.end.y);
+    let max_y = ls.start.y.max(ls.end.y);
+    DirectedLine::Vert(LineSegment {
+        start: TextCoordinate { x, y: min_y },
+        end: TextCoordinate { x, y: max_y },
+    })
+}
+
 pub fn get_rectangles(tb: &TextBuffer) -> HashSet<Rectangle> {
     let horz_segments = get_horizontal_line_segments(tb);
     let vert_segments = get_vertical_line_segments(tb);
     let mut corner_map = HashMap::<TextCoordinate, HashSet<DirectedLine>>::default();
     for (corner, ls) in horz_segments
         .iter()
-        .flat_map(|ls| {
-            [
-                (ls.start, DirectedLine::Horiz(*ls)),
-                (ls.end, DirectedLine::Horiz(*ls)),
-            ]
-        })
-        .chain(vert_segments.iter().flat_map(|ls| {
-            [
-                (ls.start, DirectedLine::Vert(*ls)),
-                (ls.end, DirectedLine::Vert(*ls)),
-            ]
-        }))
+        .flat_map(|ls| [(ls.start, mk_horiz(*ls)), (ls.end, mk_horiz(*ls))])
+        .chain(
+            vert_segments
+                .iter()
+                .flat_map(|ls| [(ls.start, mk_vert(*ls)), (ls.end, mk_vert(*ls))]),
+        )
     {
         corner_map.entry(corner).or_default().insert(ls);
     }
@@ -87,6 +109,29 @@ pub fn get_rectangles(tb: &TextBuffer) -> HashSet<Rectangle> {
             x: opposite_x,
             y: opposite_y,
         };
+        let candidate = Rectangle { corner_1, corner_2 }.normalize();
+        let top = mk_horiz(line_segment(candidate.left_top(), candidate.right_top()));
+        let right = mk_vert(line_segment(
+            candidate.right_top(),
+            candidate.right_bottom(),
+        ));
+        let left = mk_vert(line_segment(candidate.left_top(), candidate.left_bottom()));
+        let bottom = mk_horiz(line_segment(
+            candidate.left_bottom(),
+            candidate.right_bottom(),
+        ));
+        let Some(top_left_edges) = corner_map.get(&candidate.left_top()) else {
+            continue;
+        };
+        if !top_left_edges.contains(&top) || !top_left_edges.contains(&left) {
+            continue;
+        }
+        let Some(bottom_right_edges) = corner_map.get(&candidate.right_bottom()) else {
+            continue;
+        };
+        if !bottom_right_edges.contains(&bottom) || !bottom_right_edges.contains(&right) {
+            continue;
+        }
         if corner_map.contains_key(&corner_2) {
             ret.insert(Rectangle { corner_1, corner_2 }.normalize());
         }
@@ -210,4 +255,24 @@ fn get_horizontal_line_segments(tb: &TextBuffer) -> Vec<LineSegment> {
         }
     }
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lib::{analyze::get_rectangles, tc::TextCoordinate, text_buffer::TextBuffer};
+
+    #[test]
+    fn test_extract_mis_hits() {
+        const CUP_EXAMPLE: &str = "
++-----+
+      |
+      |
+      |
++-----+
+";
+        let mut text_buffer = TextBuffer::new(20, 20);
+        text_buffer.paste(CUP_EXAMPLE, TextCoordinate { x: 1, y: 1 });
+        let rects = get_rectangles(&text_buffer);
+        assert!(rects.is_empty());
+    }
 }
