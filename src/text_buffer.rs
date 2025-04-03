@@ -1,4 +1,4 @@
-use crate::lib::{Resize, rect::Rectangle, tc::TextCoordinate};
+use crate::{Resize, rect::Rectangle, tc::TextCoordinate};
 
 #[derive(Clone, Debug)]
 pub struct TextBuffer {

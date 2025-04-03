@@ -6,8 +6,10 @@
 
 use std::collections::VecDeque;
 
-pub mod lib;
-
+use badascii::{
+    Resize, action::Action, analyze::get_rectangles, rect::Rectangle, tc::TextCoordinate,
+    text_buffer::TextBuffer,
+};
 /**
  *      .----
  *      |
@@ -43,10 +45,6 @@ use egui::{
     Rect, Sense, Shape,
     epaint::{CubicBezierShape, PathStroke},
     pos2, vec2,
-};
-use lib::{
-    Resize, action::Action, analyze::get_rectangles, rect::Rectangle, tc::TextCoordinate,
-    text_buffer::TextBuffer,
 };
 use rand::{SeedableRng, rngs::StdRng};
 use roughr::{

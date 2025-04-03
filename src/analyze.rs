@@ -1,6 +1,6 @@
 use egui::ahash::{HashMap, HashSet};
 
-use crate::lib::{rect::Rectangle, tc::TextCoordinate, text_buffer::TextBuffer};
+use crate::{rect::Rectangle, tc::TextCoordinate, text_buffer::TextBuffer};
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub struct LineSegment {
@@ -259,7 +259,7 @@ fn get_horizontal_line_segments(tb: &TextBuffer) -> Vec<LineSegment> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lib::{analyze::get_rectangles, tc::TextCoordinate, text_buffer::TextBuffer};
+    use super::*;
 
     #[test]
     fn test_extract_mis_hits() {

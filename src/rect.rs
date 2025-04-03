@@ -1,4 +1,4 @@
-use crate::lib::tc::TextCoordinate;
+use crate::tc::TextCoordinate;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Rectangle {
