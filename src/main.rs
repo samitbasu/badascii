@@ -533,9 +533,10 @@ impl eframe::App for MyApp {
                     let desired_size = ui.available_size();
                     let (resp, painter) =
                         ui.allocate_painter(desired_size, Sense::click_and_drag());
-                    let canvas = resp.rect;
-                    let delta_x = desired_size.x / self.num_cols as f32;
-                    let delta_y = desired_size.y / self.num_rows as f32;
+                    // Only use the left hand side
+                    let (canvas, canvas_right) = resp.rect.split_left_right_at_fraction(0.5);
+                    let delta_x = canvas.width() / self.num_cols as f32;
+                    let delta_y = canvas.height() / self.num_rows as f32;
                     let top_left = canvas.left_top();
                     for column in 0..=self.num_cols {
                         let col_x = column as f32 * delta_x;
@@ -665,6 +666,26 @@ impl eframe::App for MyApp {
                                 );
                             }
                         }
+                    }
+
+                    /*
+                     * Draw the right side
+                     */
+                    let rectangles = get_rectangles(&self.text);
+                    let top_left = canvas_right.left_top();
+                    for rectangle in rectangles {
+                        let corner_1 = rectangle.corner_1;
+                        let corner_2 = rectangle.corner_2;
+                        let p0 = top_left
+                            + vec2(corner_1.x as f32 * delta_x, corner_1.y as f32 * delta_y);
+                        let p1 = top_left
+                            + vec2(corner_2.x as f32 * delta_x, corner_2.y as f32 * delta_y);
+                        painter.rect_stroke(
+                            Rect::from_two_pos(p0, p1),
+                            1.0,
+                            (1.0, Color32::LIGHT_GRAY),
+                            egui::StrokeKind::Middle,
+                        );
                     }
                 });
                 match &self.tool {
