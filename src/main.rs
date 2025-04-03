@@ -4,11 +4,9 @@
 // Needs:
 // SVG export - maybe with roughr
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 
-mod lib;
-
-use crate::lib::{rect::Rectangle, tc::TextCoordinate};
+pub mod lib;
 
 /**
  *      .----
@@ -42,16 +40,18 @@ use crate::lib::{rect::Rectangle, tc::TextCoordinate};
 use eframe::egui;
 use egui::{
     Align2, Button, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers, Painter, Pos2,
-    Rect, Sense, Shape, UiBuilder,
+    Rect, Sense, Shape,
     epaint::{CubicBezierShape, PathStroke},
     pos2, vec2,
 };
-use lib::{Resize, action::Action, analyze::get_rectangles, text_buffer::TextBuffer};
+use lib::{
+    Resize, action::Action, analyze::get_rectangles, rect::Rectangle, tc::TextCoordinate,
+    text_buffer::TextBuffer,
+};
 use rand::{SeedableRng, rngs::StdRng};
 use roughr::{
-    core::{OpSet, OpType, Options, OptionsBuilder},
+    core::{OpType, OptionsBuilder},
     generator,
-    geometry::BezierCubic,
 };
 
 fn main() -> eframe::Result {
