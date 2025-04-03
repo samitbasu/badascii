@@ -42,9 +42,17 @@ use crate::lib::{rect::Rectangle, tc::TextCoordinate};
 use eframe::egui;
 use egui::{
     Align2, Button, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers, Painter, Pos2,
-    Rect, Sense, UiBuilder, epaint::PathStroke, vec2,
+    Rect, Sense, Shape, UiBuilder,
+    epaint::{CubicBezierShape, PathStroke},
+    pos2, vec2,
 };
 use lib::{Resize, action::Action, analyze::get_rectangles, text_buffer::TextBuffer};
+use rand::SeedableRng;
+use roughr::{
+    core::{OpSet, OpType, Options},
+    generator,
+    geometry::BezierCubic,
+};
 
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -62,11 +70,6 @@ fn main() -> eframe::Result {
             Ok(Box::<MyApp>::default())
         }),
     )
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum Shape {
-    Rectangle(Rect),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -673,6 +676,14 @@ impl eframe::App for MyApp {
                      */
                     let rectangles = get_rectangles(&self.text);
                     let top_left = canvas_right.left_top();
+                    let generator = generator::Generator::default();
+                    let mut opt = Options::default();
+                    let seed = [
+                        1, 0, 0, 0, 23, 0, 0, 0, 200, 1, 0, 0, 210, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    ];
+                    opt.randomizer = Some(rand::rngs::StdRng::from_seed(seed));
+                    let options = Some(opt);
                     for rectangle in rectangles {
                         let corner_1 = rectangle.corner_1;
                         let corner_2 = rectangle.corner_2;
@@ -680,12 +691,38 @@ impl eframe::App for MyApp {
                             + vec2(corner_1.x as f32 * delta_x, corner_1.y as f32 * delta_y);
                         let p1 = top_left
                             + vec2(corner_2.x as f32 * delta_x, corner_2.y as f32 * delta_y);
-                        painter.rect_stroke(
-                            Rect::from_two_pos(p0, p1),
-                            1.0,
-                            (1.0, Color32::LIGHT_GRAY),
-                            egui::StrokeKind::Middle,
-                        );
+                        let ops =
+                            generator.rectangle(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y, &options);
+                        for op_set in ops.sets {
+                            let mut pos = pos2(0.0, 0.0);
+                            for op in op_set.ops {
+                                match op.op {
+                                    OpType::Move => {
+                                        pos = pos2(op.data[0], op.data[1]);
+                                    }
+                                    OpType::LineTo => {
+                                        let new_pos = pos2(op.data[0], op.data[1]);
+                                        painter.line_segment(
+                                            [pos, new_pos],
+                                            (1.0, Color32::DARK_GREEN),
+                                        );
+                                        pos = new_pos;
+                                    }
+                                    OpType::BCurveTo => {
+                                        let cp1 = pos2(op.data[0], op.data[1]);
+                                        let cp2 = pos2(op.data[2], op.data[3]);
+                                        let end = pos2(op.data[4], op.data[5]);
+                                        painter.add(Shape::CubicBezier(CubicBezierShape {
+                                            points: [pos, cp1, cp2, end],
+                                            closed: false,
+                                            fill: Color32::TRANSPARENT,
+                                            stroke: PathStroke::new(1.0, Color32::LIGHT_GREEN),
+                                        }));
+                                        pos = end;
+                                    }
+                                }
+                            }
+                        }
                     }
                 });
                 match &self.tool {
