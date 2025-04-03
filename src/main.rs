@@ -676,7 +676,6 @@ impl eframe::App for MyApp {
                      */
                     let rectangles = get_rectangles(&self.text);
                     let top_left = canvas_right.left_top();
-                    let generator = generator::Generator::default();
                     let mut opt = Options::default();
                     let seed = [
                         1, 0, 0, 0, 23, 0, 0, 0, 200, 1, 0, 0, 210, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -685,6 +684,7 @@ impl eframe::App for MyApp {
                     opt.randomizer = Some(rand::rngs::StdRng::from_seed(seed));
                     let options = Some(opt);
                     for rectangle in rectangles {
+                        let generator = generator::Generator::default();
                         let corner_1 = rectangle.corner_1;
                         let corner_2 = rectangle.corner_2;
                         let p0 = top_left
