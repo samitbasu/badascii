@@ -4,7 +4,11 @@
 // Needs:
 // SVG export - maybe with roughr
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet, VecDeque};
+
+mod lib;
+
+use crate::lib::{rect::Rectangle, tc::TextCoordinate};
 
 /**
  *      .----
@@ -38,8 +42,9 @@ use std::collections::VecDeque;
 use eframe::egui;
 use egui::{
     Align2, Button, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers, Painter, Pos2,
-    Rect, Sense, epaint::PathStroke, vec2,
+    Rect, Sense, UiBuilder, epaint::PathStroke, vec2,
 };
+use lib::{Resize, action::Action, analyze::get_rectangles, text_buffer::TextBuffer};
 
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -64,48 +69,6 @@ enum Shape {
     Rectangle(Rect),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Default)]
-struct TextCoordinate {
-    x: u32,
-    y: u32,
-}
-
-impl TextCoordinate {
-    fn right(self) -> Self {
-        Self {
-            x: self.x + 1,
-            y: self.y,
-        }
-    }
-    fn left(self) -> Self {
-        Self {
-            x: self.x.saturating_sub(1),
-            y: self.y,
-        }
-    }
-    fn up(self) -> Self {
-        Self {
-            x: self.x,
-            y: self.y.saturating_sub(1),
-        }
-    }
-    fn down(self) -> Self {
-        Self {
-            x: self.x,
-            y: self.y + 1,
-        }
-    }
-
-    fn shifted(self, origin: TextCoordinate, move_pos: TextCoordinate) -> TextCoordinate {
-        let delta_x = move_pos.x as i32 - origin.x as i32;
-        let delta_y = move_pos.y as i32 - origin.y as i32;
-        TextCoordinate {
-            x: self.x.saturating_add_signed(delta_x),
-            y: self.y.saturating_add_signed(delta_y),
-        }
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
 struct TextState {
     origin: TextCoordinate,
@@ -127,77 +90,6 @@ enum Tool {
     MovingText(MoveState),
 }
 
-#[derive(Copy, Clone, Debug)]
-struct Rectangle {
-    corner_1: TextCoordinate,
-    corner_2: TextCoordinate,
-}
-
-impl Rectangle {
-    fn new(corner_1: TextCoordinate, corner_2: TextCoordinate) -> Rectangle {
-        Rectangle { corner_1, corner_2 }
-    }
-    fn contains(&self, coord: &TextCoordinate) -> bool {
-        let min_x = self.corner_1.x.min(self.corner_2.x);
-        let max_x = self.corner_1.x.max(self.corner_2.x);
-        let min_y = self.corner_1.y.min(self.corner_2.y);
-        let max_y = self.corner_1.y.max(self.corner_2.y);
-        (min_x..=max_x).contains(&coord.x) && (min_y..=max_y).contains(&coord.y)
-    }
-
-    fn shifted(self, origin: TextCoordinate, move_pos: TextCoordinate) -> Self {
-        Self {
-            corner_1: self.corner_1.shifted(origin, move_pos),
-            corner_2: self.corner_2.shifted(origin, move_pos),
-        }
-    }
-
-    fn iter_interior(&self) -> impl Iterator<Item = TextCoordinate> {
-        let min_x = self.corner_1.x.min(self.corner_2.x);
-        let max_x = self.corner_1.x.max(self.corner_2.x);
-        let min_y = self.corner_1.y.min(self.corner_2.y);
-        let max_y = self.corner_1.y.max(self.corner_2.y);
-        (min_y..=max_y).flat_map(move |y| (min_x..=max_x).map(move |x| TextCoordinate { x, y }))
-    }
-
-    fn height(&self) -> u32 {
-        let y_min = self.corner_1.y.min(self.corner_2.y);
-        let y_max = self.corner_1.y.max(self.corner_2.y);
-        y_max - y_min + 1
-    }
-    fn width(&self) -> u32 {
-        let x_min = self.corner_1.x.min(self.corner_2.x);
-        let x_max = self.corner_1.x.max(self.corner_2.x);
-        x_max - x_min + 1
-    }
-
-    fn left(&self) -> u32 {
-        self.corner_1.x.min(self.corner_2.x)
-    }
-
-    fn top(&self) -> u32 {
-        self.corner_1.y.min(self.corner_2.y)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum Action {
-    Char(char),
-    Backspace,
-    LeftArrow,
-    RightArrow,
-    UpArrow,
-    DownArrow,
-    LeftControlArrow,
-    RightControlArrow,
-    UpControlArrow,
-    DownControlArrow,
-    Escape,
-    Enter,
-    Paste(String),
-    Copy,
-}
-
 fn map_key(key: &Key, modifiers: &Modifiers) -> Option<Action> {
     match key {
         Key::Backspace => Some(Action::Backspace),
@@ -214,117 +106,6 @@ fn map_key(key: &Key, modifiers: &Modifiers) -> Option<Action> {
         Key::Copy => Some(Action::Copy),
         _ => None,
     }
-}
-
-#[derive(Clone, Debug)]
-struct TextBuffer {
-    buffer: Box<[Option<char>]>,
-    num_rows: u32,
-    num_cols: u32,
-}
-
-impl TextBuffer {
-    pub fn new(rows: u32, cols: u32) -> Self {
-        Self {
-            buffer: vec![None; (cols * rows) as usize].into_boxed_slice(),
-            num_rows: rows,
-            num_cols: cols,
-        }
-    }
-    pub fn set_text(&mut self, pos: &TextCoordinate, ch: Option<char>) {
-        if (0..self.num_cols).contains(&pos.x) && (0..self.num_rows).contains(&pos.y) {
-            self.buffer[(pos.x + pos.y * self.num_cols) as usize] = ch;
-        }
-    }
-    pub fn iter(&self) -> impl Iterator<Item = (TextCoordinate, char)> {
-        self.buffer.iter().enumerate().filter_map(|(ndx, c)| {
-            if let Some(c) = c {
-                let row = ndx as u32 / self.num_cols;
-                let col = ndx as u32 % self.num_cols;
-                Some((TextCoordinate { x: col, y: row }, *c))
-            } else {
-                None
-            }
-        })
-    }
-
-    fn clear_rectangle(&mut self, selection: Rectangle) {
-        for pos in selection.iter_interior() {
-            self.set_text(&pos, None);
-        }
-    }
-
-    fn get(&self, pos: TextCoordinate) -> Option<char> {
-        if (0..self.num_cols).contains(&pos.x) && (0..self.num_rows).contains(&pos.y) {
-            self.buffer[(pos.x + pos.y * self.num_cols) as usize]
-        } else {
-            None
-        }
-    }
-
-    fn clear_all(&mut self) {
-        self.buffer.fill(None)
-    }
-
-    fn paste(&mut self, initial_text: &str, pos: TextCoordinate) -> Rectangle {
-        let corner_1 = pos;
-        let mut corner_2 = corner_1;
-        for (row, line) in initial_text.lines().enumerate() {
-            for (col, char) in line.chars().enumerate() {
-                let pos = TextCoordinate {
-                    x: pos.x + col as u32,
-                    y: pos.y + row as u32,
-                };
-                corner_2.x = corner_2.x.max(pos.x);
-                corner_2.y = corner_2.y.max(pos.y);
-                self.set_text(&pos, Some(char))
-            }
-        }
-        Rectangle { corner_1, corner_2 }
-    }
-    fn window(&self, rect: &Rectangle) -> TextBuffer {
-        let mut out_buffer = TextBuffer::new(rect.height(), rect.width());
-        let min_x = rect.left();
-        let min_y = rect.top();
-        for row in 0..rect.height() {
-            for col in 0..rect.width() {
-                out_buffer.set_text(
-                    &TextCoordinate { x: col, y: row },
-                    self.get(TextCoordinate {
-                        x: min_x + col,
-                        y: min_y + row,
-                    }),
-                )
-            }
-        }
-        out_buffer
-    }
-
-    fn render(&self) -> String {
-        let rows = self.buffer.chunks(self.num_cols as usize);
-        let t = rows.flat_map(|x| {
-            x.iter()
-                .map(|c| c.unwrap_or(' '))
-                .chain(std::iter::once('\n'))
-        });
-        t.collect()
-    }
-
-    fn resize(&self, resize: Resize) -> TextBuffer {
-        let mut output = TextBuffer::new(resize.num_rows, resize.num_cols);
-        for row in 0..resize.num_rows {
-            for col in 0..resize.num_cols {
-                let tc = TextCoordinate { x: col, y: row };
-                output.set_text(&tc, self.get(tc));
-            }
-        }
-        output
-    }
-}
-
-struct Resize {
-    num_rows: u32,
-    num_cols: u32,
 }
 
 #[derive(Clone)]
@@ -697,6 +478,12 @@ impl eframe::App for MyApp {
                     {
                         self.redo();
                     }
+                    if ui.button("☸").clicked() {
+                        let tic = std::time::Instant::now();
+                        let rectangles = get_rectangles(&self.text);
+                        eprintln!("Elapsed {:?}", tic.elapsed());
+                        eprintln!("{:?}", rectangles);
+                    }
                 });
                 if let Some(mut resize) = self.resize.take() {
                     let mut should_close = false;
@@ -743,7 +530,6 @@ impl eframe::App for MyApp {
                     }
                 };
                 egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                    //ui.label(format!("{:?}", self.tool));
                     let desired_size = ui.available_size();
                     let (resp, painter) =
                         ui.allocate_painter(desired_size, Sense::click_and_drag());
