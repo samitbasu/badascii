@@ -42,13 +42,13 @@ use badascii::{
 use eframe::egui;
 use egui::{
     Align2, Button, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers, Painter, Pos2,
-    Rect, Sense, Shape,
+    Rect, Response, Sense, Shape, Ui,
     epaint::{CubicBezierShape, PathStroke},
     pos2, vec2,
 };
 use rand::{SeedableRng, rngs::StdRng};
 use roughr::{
-    core::{OpType, OptionsBuilder},
+    core::{Drawable, OpType, OptionsBuilder},
     generator,
 };
 
@@ -168,6 +168,36 @@ impl Default for MyApp {
             hover_pos: None,
             resize: None,
             rand_pool,
+        }
+    }
+}
+
+fn stroke_opset(ops: Drawable<f32>, painter: &Painter) {
+    for op_set in ops.sets {
+        let mut pos = pos2(0.0, 0.0);
+        for op in op_set.ops {
+            match op.op {
+                OpType::Move => {
+                    pos = pos2(op.data[0], op.data[1]);
+                }
+                OpType::LineTo => {
+                    let new_pos = pos2(op.data[0], op.data[1]);
+                    painter.line_segment([pos, new_pos], (1.0, Color32::DARK_GREEN));
+                    pos = new_pos;
+                }
+                OpType::BCurveTo => {
+                    let cp1 = pos2(op.data[0], op.data[1]);
+                    let cp2 = pos2(op.data[2], op.data[3]);
+                    let end = pos2(op.data[4], op.data[5]);
+                    painter.add(Shape::CubicBezier(CubicBezierShape {
+                        points: [pos, cp1, cp2, end],
+                        closed: false,
+                        fill: Color32::TRANSPARENT,
+                        stroke: PathStroke::new(1.0, Color32::LIGHT_GREEN),
+                    }));
+                    pos = end;
+                }
+            }
         }
     }
 }
@@ -464,6 +494,248 @@ impl MyApp {
             self.tool = buf.tool;
         }
     }
+    fn control_panel(&mut self, ui: &mut Ui) {
+        if ui.button("⚙").clicked() {
+            self.resize = Some(Resize {
+                num_cols: self.num_cols,
+                num_rows: self.num_rows,
+            });
+        }
+        if ui
+            .add_enabled(!self.snapshots.is_empty(), Button::new("Undo"))
+            .clicked()
+        {
+            self.undo();
+        }
+        if ui
+            .add_enabled(!self.futures.is_empty(), Button::new("Redo"))
+            .clicked()
+        {
+            self.redo();
+        }
+        if ui.button("☸").clicked() {
+            let tic = std::time::Instant::now();
+            let rectangles = get_rectangles(&self.text);
+            eprintln!("Elapsed {:?}", tic.elapsed());
+            eprintln!("{:?}", rectangles);
+        }
+    }
+    fn resize_panel(&mut self, ui: &mut Ui) {
+        if let Some(mut resize) = self.resize.take() {
+            let mut should_close = false;
+            let mut should_apply = false;
+            let modal = egui::containers::Modal::new("Resize".into());
+            modal.show(ui.ctx(), |ui| {
+                ui.label("Resize canvas");
+                egui::Grid::new("resize")
+                    .num_columns(2)
+                    .spacing([40.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.label("Width");
+                        ui.add(DragValue::new(&mut resize.num_cols));
+                        ui.end_row();
+                        ui.label("Height");
+                        ui.add(DragValue::new(&mut resize.num_rows));
+                        ui.end_row();
+                    });
+
+                egui::Sides::new().show(
+                    ui,
+                    |_ui| {},
+                    |ui| {
+                        if ui.button("Cancel").clicked() {
+                            should_close = true;
+                        }
+                        if ui.button("Apply").clicked() {
+                            should_apply = true;
+                            should_close = true;
+                        }
+                    },
+                );
+            });
+            if should_close {
+                if should_apply {
+                    self.num_cols = resize.num_cols;
+                    self.num_rows = resize.num_rows;
+                    self.text = self.text.resize(resize);
+                }
+                self.resize = None;
+            } else {
+                self.resize = Some(resize);
+            }
+        };
+    }
+    fn draw_grid(&mut self, canvas: &Rect, painter: &Painter) {
+        let delta_x = canvas.width() / self.num_cols as f32;
+        let delta_y = canvas.height() / self.num_rows as f32;
+        let top_left = canvas.left_top();
+        for column in 0..=self.num_cols {
+            let col_x = column as f32 * delta_x;
+            let p0 = top_left + vec2(col_x, 0.0);
+            let p1 = top_left + vec2(col_x, canvas.height());
+            painter.line(
+                vec![p0, p1],
+                PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
+            );
+        }
+        for row in 0..=self.num_rows {
+            let row_y = row as f32 * delta_y;
+            let p0 = top_left + vec2(0.0, row_y);
+            let p1 = top_left + vec2(canvas.width(), row_y);
+            painter.line(
+                vec![p0, p1],
+                PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
+            );
+        }
+    }
+    fn draw_text_buffer(&mut self, canvas: &Rect, painter: &Painter) {
+        for (coord, ch) in self.text.iter() {
+            let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
+            let monospace = FontId::monospace(10.0);
+            painter.text(
+                center,
+                Align2::CENTER_CENTER,
+                ch,
+                monospace,
+                Color32::WHITE.linear_multiply(0.7),
+            );
+        }
+    }
+    fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter) {
+        let mut rectangles = get_rectangles(&self.text);
+        rectangles.extend(get_rectangles(&self.selected_text));
+        let top_left = canvas.left_top();
+        let delta_x = canvas.width() / self.num_cols as f32;
+        let delta_y = canvas.height() / self.num_rows as f32;
+        for rectangle in rectangles.iter() {
+            let generator = generator::Generator::default();
+            let id = (egui::util::hash(rectangle) % self.rand_pool.len() as u64) as usize;
+            let mut options = OptionsBuilder::default();
+            options.randomizer(self.rand_pool[id].clone());
+            let options = Some(options.build().unwrap());
+            let corner_1 = rectangle.corner_1;
+            let corner_2 = rectangle.corner_2;
+            let p0 = top_left
+                + vec2(corner_1.x as f32 * delta_x, corner_1.y as f32 * delta_y)
+                + vec2(0.5 * delta_x, 0.5 * delta_y);
+            let p1 = top_left
+                + vec2(corner_2.x as f32 * delta_x, corner_2.y as f32 * delta_y)
+                + vec2(0.5 * delta_x, 0.5 * delta_y);
+            let ops = generator.rectangle(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y, &options);
+            stroke_opset(ops, painter);
+        }
+        self.draw_text_buffer(canvas, painter);
+    }
+    fn show_hover(&mut self, canvas: &Rect, pos: Pos2, painter: &Painter) {
+        let top_left = canvas.left_top();
+        let delta_x = canvas.width() / self.num_cols as f32;
+        let delta_y = canvas.height() / self.num_rows as f32;
+        if let Some(text_coordinate) = self.map_pos_to_coords(canvas, pos) {
+            let col = text_coordinate.x as f32;
+            let row = text_coordinate.y as f32;
+            let top_left_corner = top_left + vec2(col * delta_x, row * delta_y);
+            let bottom_right_corner = top_left_corner + vec2(delta_x, delta_y);
+            painter.rect_filled(
+                Rect::from_two_pos(top_left_corner, bottom_right_corner),
+                1.0,
+                Color32::LIGHT_BLUE.linear_multiply(0.3),
+            );
+            self.on_hover(Some(text_coordinate));
+        } else {
+            self.on_hover(None);
+        }
+    }
+    fn on_handle_interaction(
+        &mut self,
+        resp: &Response,
+        canvas: &Rect,
+        pos: Pos2,
+        painter: &Painter,
+    ) {
+        if let Some(text_coordinate) = self.map_pos_to_coords(canvas, pos) {
+            if resp.drag_started() {
+                self.on_drag_start(text_coordinate);
+            } else if resp.dragged() {
+                self.on_drag(text_coordinate, canvas, painter);
+            } else if resp.drag_stopped() {
+                self.on_drag_stop(text_coordinate);
+            } else if resp.clicked() {
+                self.on_click(text_coordinate);
+            }
+        }
+    }
+    fn tool_specific_drawing(&self, canvas: &Rect, painter: &Painter) {
+        let delta_x = canvas.width() / self.num_cols as f32;
+        let delta_y = canvas.height() / self.num_rows as f32;
+        match self.tool {
+            Tool::Text(Some(TextState { origin: _, cursor })) => {
+                let center = self.map_text_coordinate_to_cell_center(canvas, &cursor);
+                let rect = Rect::from_center_size(center, vec2(delta_x, delta_y));
+                painter.rect_stroke(
+                    rect,
+                    0.5,
+                    (1.0, Color32::LIGHT_YELLOW),
+                    egui::StrokeKind::Middle,
+                );
+            }
+            Tool::Selected(selection_box) => {
+                for (coord, ch) in self.selected_text.iter() {
+                    if selection_box.contains(&coord) {
+                        let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
+                        let monospace = FontId::monospace(10.0);
+                        painter.text(
+                            center,
+                            Align2::CENTER_CENTER,
+                            ch,
+                            monospace,
+                            Color32::GREEN.linear_multiply(0.5),
+                        );
+                    }
+                }
+            }
+            Tool::MovingText(MoveState {
+                selection,
+                origin,
+                move_pos,
+            }) => {
+                let bbox_shifted = selection.shifted(origin, move_pos);
+                for (coord, ch) in self.selected_text.iter() {
+                    let coord = coord.shifted(origin, move_pos);
+                    if bbox_shifted.contains(&coord) {
+                        let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
+                        let monospace = FontId::monospace(10.0);
+                        painter.text(center, Align2::CENTER_CENTER, ch, monospace, Color32::GREEN);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    fn process_actions(&mut self, ui: &mut Ui) {
+        if let Some(action) = ui.input(|i| {
+            i.events.iter().find_map(|x| match x {
+                Event::Text(string) => {
+                    if string.len() == 1 {
+                        Some(Action::Char(string.chars().nth(0).unwrap()))
+                    } else {
+                        None
+                    }
+                }
+                Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } => map_key(key, modifiers),
+                Event::Paste(string) => Some(Action::Paste(string.clone())),
+                Event::Copy => Some(Action::Copy),
+                _ => None,
+            })
+        }) {
+            self.on_action(action);
+        }
+    }
 }
 
 impl eframe::App for MyApp {
@@ -471,265 +743,26 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("⚙").clicked() {
-                        self.resize = Some(Resize {
-                            num_cols: self.num_cols,
-                            num_rows: self.num_rows,
-                        });
-                    }
-                    if ui
-                        .add_enabled(!self.snapshots.is_empty(), Button::new("Undo"))
-                        .clicked()
-                    {
-                        self.undo();
-                    }
-                    if ui
-                        .add_enabled(!self.futures.is_empty(), Button::new("Redo"))
-                        .clicked()
-                    {
-                        self.redo();
-                    }
-                    if ui.button("☸").clicked() {
-                        let tic = std::time::Instant::now();
-                        let rectangles = get_rectangles(&self.text);
-                        eprintln!("Elapsed {:?}", tic.elapsed());
-                        eprintln!("{:?}", rectangles);
-                    }
+                    self.control_panel(ui);
                 });
-                if let Some(mut resize) = self.resize.take() {
-                    let mut should_close = false;
-                    let mut should_apply = false;
-                    let modal = egui::containers::Modal::new("Resize".into());
-                    modal.show(ui.ctx(), |ui| {
-                        ui.label("Resize canvas");
-                        egui::Grid::new("resize")
-                            .num_columns(2)
-                            .spacing([40.0, 4.0])
-                            .striped(true)
-                            .show(ui, |ui| {
-                                ui.label("Width");
-                                ui.add(DragValue::new(&mut resize.num_cols));
-                                ui.end_row();
-                                ui.label("Height");
-                                ui.add(DragValue::new(&mut resize.num_rows));
-                                ui.end_row();
-                            });
-
-                        egui::Sides::new().show(
-                            ui,
-                            |_ui| {},
-                            |ui| {
-                                if ui.button("Cancel").clicked() {
-                                    should_close = true;
-                                }
-                                if ui.button("Apply").clicked() {
-                                    should_apply = true;
-                                    should_close = true;
-                                }
-                            },
-                        );
-                    });
-                    if should_close {
-                        if should_apply {
-                            self.num_cols = resize.num_cols;
-                            self.num_rows = resize.num_rows;
-                            self.text = self.text.resize(resize);
-                        }
-                        self.resize = None;
-                    } else {
-                        self.resize = Some(resize);
-                    }
-                };
+                self.resize_panel(ui);
                 egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
                     let desired_size = ui.available_size();
                     let (resp, painter) =
                         ui.allocate_painter(desired_size, Sense::click_and_drag());
                     // Only use the left hand side
                     let (canvas, canvas_right) = resp.rect.split_left_right_at_fraction(0.5);
-                    let delta_x = canvas.width() / self.num_cols as f32;
-                    let delta_y = canvas.height() / self.num_rows as f32;
-                    let top_left = canvas.left_top();
-                    for column in 0..=self.num_cols {
-                        let col_x = column as f32 * delta_x;
-                        let p0 = top_left + vec2(col_x, 0.0);
-                        let p1 = top_left + vec2(col_x, canvas.height());
-                        painter.line(
-                            vec![p0, p1],
-                            PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
-                        );
-                    }
-                    for row in 0..=self.num_rows {
-                        let row_y = row as f32 * delta_y;
-                        let p0 = top_left + vec2(0.0, row_y);
-                        let p1 = top_left + vec2(canvas.width(), row_y);
-                        painter.line(
-                            vec![p0, p1],
-                            PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
-                        );
-                    }
-                    for (coord, ch) in self.text.iter() {
-                        let center = self.map_text_coordinate_to_cell_center(&canvas, &coord);
-                        let monospace = FontId::monospace(10.0);
-                        painter.text(
-                            center,
-                            Align2::CENTER_CENTER,
-                            ch,
-                            monospace,
-                            Color32::WHITE.linear_multiply(0.7),
-                        );
-                    }
+                    self.draw_grid(&canvas, &painter);
+                    self.draw_text_buffer(&canvas, &painter);
                     if let Some(pos) = resp.hover_pos() {
-                        if let Some(text_coordinate) = self.map_pos_to_coords(&canvas, pos) {
-                            let col = text_coordinate.x as f32;
-                            let row = text_coordinate.y as f32;
-                            let top_left_corner = top_left + vec2(col * delta_x, row * delta_y);
-                            let bottom_right_corner = top_left_corner + vec2(delta_x, delta_y);
-                            painter.rect_filled(
-                                Rect::from_two_pos(top_left_corner, bottom_right_corner),
-                                1.0,
-                                Color32::LIGHT_BLUE.linear_multiply(0.3),
-                            );
-                            self.on_hover(Some(text_coordinate));
-                        } else {
-                            self.on_hover(None);
-                        }
+                        self.show_hover(&canvas, pos, &painter);
                     }
                     if let Some(pos) = resp.interact_pointer_pos() {
-                        if let Some(text_coordinate) = self.map_pos_to_coords(&canvas, pos) {
-                            if resp.drag_started() {
-                                self.on_drag_start(text_coordinate);
-                            } else if resp.dragged() {
-                                self.on_drag(text_coordinate, &canvas, &painter);
-                            } else if resp.drag_stopped() {
-                                self.on_drag_stop(text_coordinate);
-                            } else if resp.clicked() {
-                                self.on_click(text_coordinate);
-                            }
-                        }
+                        self.on_handle_interaction(&resp, &canvas, pos, &painter);
                     }
-                    if let Some(action) = ui.input(|i| {
-                        i.events.iter().find_map(|x| match x {
-                            Event::Text(string) => {
-                                if string.len() == 1 {
-                                    Some(Action::Char(string.chars().nth(0).unwrap()))
-                                } else {
-                                    None
-                                }
-                            }
-                            Event::Key {
-                                key,
-                                pressed: true,
-                                modifiers,
-                                ..
-                            } => map_key(key, modifiers),
-                            Event::Paste(string) => Some(Action::Paste(string.clone())),
-                            Event::Copy => Some(Action::Copy),
-                            _ => None,
-                        })
-                    }) {
-                        self.on_action(action);
-                    }
-                    if let Tool::Text(Some(TextState { origin: _, cursor })) = self.tool {
-                        let center = self.map_text_coordinate_to_cell_center(&canvas, &cursor);
-                        let rect = Rect::from_center_size(center, vec2(delta_x, delta_y));
-                        painter.rect_stroke(
-                            rect,
-                            0.5,
-                            (1.0, Color32::LIGHT_YELLOW),
-                            egui::StrokeKind::Middle,
-                        );
-                    }
-                    if let Tool::Selected(selection_box) = self.tool {
-                        for (coord, ch) in self.selected_text.iter() {
-                            if selection_box.contains(&coord) {
-                                let center =
-                                    self.map_text_coordinate_to_cell_center(&canvas, &coord);
-                                let monospace = FontId::monospace(10.0);
-                                painter.text(
-                                    center,
-                                    Align2::CENTER_CENTER,
-                                    ch,
-                                    monospace,
-                                    Color32::GREEN.linear_multiply(0.5),
-                                );
-                            }
-                        }
-                    }
-                    if let Tool::MovingText(MoveState {
-                        selection,
-                        origin,
-                        move_pos,
-                    }) = self.tool
-                    {
-                        let bbox_shifted = selection.shifted(origin, move_pos);
-                        for (coord, ch) in self.selected_text.iter() {
-                            let coord = coord.shifted(origin, move_pos);
-                            if bbox_shifted.contains(&coord) {
-                                let center =
-                                    self.map_text_coordinate_to_cell_center(&canvas, &coord);
-                                let monospace = FontId::monospace(10.0);
-                                painter.text(
-                                    center,
-                                    Align2::CENTER_CENTER,
-                                    ch,
-                                    monospace,
-                                    Color32::GREEN,
-                                );
-                            }
-                        }
-                    }
-
-                    /*
-                     * Draw the right side
-                     */
-                    let rectangles = get_rectangles(&self.text);
-                    let top_left = canvas_right.left_top();
-                    for rectangle in rectangles.iter() {
-                        let generator = generator::Generator::default();
-                        let id =
-                            (egui::util::hash(rectangle) % self.rand_pool.len() as u64) as usize;
-                        let mut options = OptionsBuilder::default();
-                        options.randomizer(self.rand_pool[id].clone());
-                        let options = Some(options.build().unwrap());
-                        let corner_1 = rectangle.corner_1;
-                        let corner_2 = rectangle.corner_2;
-                        let p0 = top_left
-                            + vec2(corner_1.x as f32 * delta_x, corner_1.y as f32 * delta_y);
-                        let p1 = top_left
-                            + vec2(corner_2.x as f32 * delta_x, corner_2.y as f32 * delta_y);
-                        let ops =
-                            generator.rectangle(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y, &options);
-                        for op_set in ops.sets {
-                            let mut pos = pos2(0.0, 0.0);
-                            for op in op_set.ops {
-                                match op.op {
-                                    OpType::Move => {
-                                        pos = pos2(op.data[0], op.data[1]);
-                                    }
-                                    OpType::LineTo => {
-                                        let new_pos = pos2(op.data[0], op.data[1]);
-                                        painter.line_segment(
-                                            [pos, new_pos],
-                                            (1.0, Color32::DARK_GREEN),
-                                        );
-                                        pos = new_pos;
-                                    }
-                                    OpType::BCurveTo => {
-                                        let cp1 = pos2(op.data[0], op.data[1]);
-                                        let cp2 = pos2(op.data[2], op.data[3]);
-                                        let end = pos2(op.data[4], op.data[5]);
-                                        painter.add(Shape::CubicBezier(CubicBezierShape {
-                                            points: [pos, cp1, cp2, end],
-                                            closed: false,
-                                            fill: Color32::TRANSPARENT,
-                                            stroke: PathStroke::new(1.0, Color32::LIGHT_GREEN),
-                                        }));
-                                        pos = end;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    self.process_actions(ui);
+                    self.tool_specific_drawing(&canvas, &painter);
+                    self.draw_rendered_schematic(&canvas_right, &painter);
                 });
                 match &self.tool {
                     Tool::Text(_) => {
