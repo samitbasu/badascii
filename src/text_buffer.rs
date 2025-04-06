@@ -16,6 +16,7 @@ impl TextBuffer {
         }
     }
     pub fn set_text(&mut self, pos: &TextCoordinate, ch: Option<char>) {
+        let ch = if ch == Some(' ') { None } else { ch };
         if (0..self.num_cols).contains(&pos.x) && (0..self.num_rows).contains(&pos.y) {
             self.buffer[(pos.x + pos.y * self.num_cols) as usize] = ch;
         }

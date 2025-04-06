@@ -7,10 +7,24 @@
 use std::collections::VecDeque;
 
 use badascii::{
-    Resize, action::Action, analyze::get_rectangles, rect::Rectangle, tc::TextCoordinate,
+    Resize,
+    action::Action,
+    analyze::{get_rectangles, get_wires},
+    rect::Rectangle,
+    tc::TextCoordinate,
     text_buffer::TextBuffer,
 };
 /**
+ *
+ *
+ * Line detection
+ *
+ * Term, edge+, Term
+ *
+ * Where Term = {+, <, >, o}
+ *
+ *
+ *
  *      .----
  *      |
  *   ---| i.data
@@ -46,9 +60,11 @@ use egui::{
     epaint::{CubicBezierShape, PathStroke},
     pos2, vec2,
 };
+use egui_dock::{DockArea, DockState, Style, TabViewer};
 use rand::{SeedableRng, rngs::StdRng};
 use roughr::{
-    core::{Drawable, OpType, OptionsBuilder},
+    PathSegment,
+    core::{Drawable, OpSetType, OpType, OptionsBuilder},
     generator,
 };
 
@@ -116,6 +132,12 @@ struct Snapshot {
     tool: Tool,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Tab {
+    Ascii,
+    Preview,
+}
+
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
@@ -128,6 +150,8 @@ struct MyApp {
     hover_pos: Option<TextCoordinate>,
     resize: Option<Resize>,
     rand_pool: Vec<StdRng>,
+    prev_action: Option<Action>,
+    dock_state: DockState<Tab>,
 }
 
 const INITIAL_TEXT: &str = "
@@ -168,12 +192,37 @@ impl Default for MyApp {
             hover_pos: None,
             resize: None,
             rand_pool,
+            prev_action: None,
+            dock_state: DockState::new(vec![Tab::Ascii, Tab::Preview]),
         }
     }
 }
 
+fn move_to(p: Pos2) -> PathSegment {
+    PathSegment::MoveTo {
+        abs: true,
+        x: p.x as f64,
+        y: p.y as f64,
+    }
+}
+
+fn line_to(p: Pos2) -> PathSegment {
+    PathSegment::LineTo {
+        abs: true,
+        x: p.x as f64,
+        y: p.y as f64,
+    }
+}
+
+fn close_path() -> PathSegment {
+    PathSegment::ClosePath { abs: true }
+}
+
 fn stroke_opset(ops: Drawable<f32>, painter: &Painter) {
     for op_set in ops.sets {
+        if op_set.op_set_type != OpSetType::Path {
+            continue;
+        }
         let mut pos = pos2(0.0, 0.0);
         for op in op_set.ops {
             match op.op {
@@ -351,7 +400,7 @@ impl MyApp {
     }
     fn on_action_with_text(&mut self, text_state: TextState, action: Action) {
         let TextState { cursor, origin } = text_state;
-        match action {
+        match action.clone() {
             Action::Paste(txt) => {
                 self.text.paste(&txt, cursor);
             }
@@ -370,7 +419,14 @@ impl MyApp {
                 }));
             }
             Action::RightControlArrow => {
-                self.set_text('-', &cursor);
+                let char = if (self.prev_action == Some(Action::DownControlArrow))
+                    || (self.prev_action == Some(Action::UpControlArrow))
+                {
+                    '+'
+                } else {
+                    '-'
+                };
+                self.set_text(char, &cursor);
                 self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.right(),
@@ -383,7 +439,14 @@ impl MyApp {
                 }));
             }
             Action::LeftControlArrow => {
-                self.set_text('-', &cursor);
+                let char = if (self.prev_action == Some(Action::DownControlArrow))
+                    || (self.prev_action == Some(Action::UpControlArrow))
+                {
+                    '+'
+                } else {
+                    '-'
+                };
+                self.set_text(char, &cursor);
                 self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.left(),
@@ -396,7 +459,14 @@ impl MyApp {
                 }));
             }
             Action::UpControlArrow => {
-                self.set_text('|', &cursor);
+                let char = if (self.prev_action == Some(Action::LeftControlArrow))
+                    || (self.prev_action == Some(Action::RightControlArrow))
+                {
+                    '+'
+                } else {
+                    '|'
+                };
+                self.set_text(char, &cursor);
                 self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.up(),
@@ -409,7 +479,14 @@ impl MyApp {
                 }));
             }
             Action::DownControlArrow => {
-                self.set_text('|', &cursor);
+                let char = if (self.prev_action == Some(Action::LeftControlArrow))
+                    || (self.prev_action == Some(Action::RightControlArrow))
+                {
+                    '+'
+                } else {
+                    '|'
+                };
+                self.set_text(char, &cursor);
                 self.tool = Tool::Text(Some(TextState {
                     origin,
                     cursor: cursor.down(),
@@ -435,6 +512,7 @@ impl MyApp {
                 self.copy_buffer = Some(self.text.render());
             }
         }
+        self.prev_action = Some(action);
     }
     fn on_action(&mut self, action: Action) {
         match &self.tool {
@@ -590,14 +668,17 @@ impl MyApp {
         }
     }
     fn draw_text_buffer(&mut self, canvas: &Rect, painter: &Painter) {
+        let delta_x = canvas.width() / self.num_cols as f32;
+        let delta_y = canvas.height() / self.num_rows as f32;
+        let text_size = delta_x.min(delta_y);
+        let monospace = FontId::monospace(text_size);
         for (coord, ch) in self.text.iter() {
             let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
-            let monospace = FontId::monospace(10.0);
             painter.text(
                 center,
                 Align2::CENTER_CENTER,
                 ch,
-                monospace,
+                monospace.clone(),
                 Color32::WHITE.linear_multiply(0.7),
             );
         }
@@ -608,24 +689,120 @@ impl MyApp {
         let top_left = canvas.left_top();
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
-        for rectangle in rectangles.iter() {
+        let mut labels = self.text.clone();
+        let pos_map = |pos: TextCoordinate| {
+            top_left
+                + vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y)
+                + vec2(0.5 * delta_x, 0.5 * delta_y)
+        };
+        let wires = get_wires(&self.text);
+        for wire in wires {
             let generator = generator::Generator::default();
-            let id = (egui::util::hash(rectangle) % self.rand_pool.len() as u64) as usize;
+            let id = (egui::util::hash(&wire) % self.rand_pool.len() as u64) as usize;
             let mut options = OptionsBuilder::default();
             options.randomizer(self.rand_pool[id].clone());
             let options = Some(options.build().unwrap());
-            let corner_1 = rectangle.corner_1;
-            let corner_2 = rectangle.corner_2;
-            let p0 = top_left
-                + vec2(corner_1.x as f32 * delta_x, corner_1.y as f32 * delta_y)
-                + vec2(0.5 * delta_x, 0.5 * delta_y);
-            let p1 = top_left
-                + vec2(corner_2.x as f32 * delta_x, corner_2.y as f32 * delta_y)
-                + vec2(0.5 * delta_x, 0.5 * delta_y);
-            let ops = generator.rectangle(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y, &options);
+            let segments = wire
+                .segments
+                .iter()
+                .flat_map(|ls| {
+                    let p0 = pos_map(ls.start);
+                    let p1 = pos_map(ls.end);
+                    [move_to(p0), line_to(p1)]
+                })
+                .collect();
+            for segment in &wire.segments {
+                for pt in segment.iter() {
+                    labels.set_text(&pt, None);
+                }
+            }
+            let ops = generator.path_from_segments(segments, &options);
             stroke_opset(ops, painter);
+            // Draw end things
+            for segment in wire.segments {
+                let pos = segment.start;
+                if let Some(ch) = self.text.get(pos) {
+                    self.render_wire_end(ch, canvas, pos, painter);
+                    labels.set_text(&pos, None);
+                }
+                let pos = segment.end;
+                if let Some(ch) = self.text.get(pos) {
+                    self.render_wire_end(ch, canvas, pos, painter);
+                    labels.set_text(&pos, None);
+                }
+            }
         }
-        self.draw_text_buffer(canvas, painter);
+        let text_size = delta_x.min(delta_y);
+        let monospace = FontId::monospace(text_size);
+        for (coord, ch) in labels.iter() {
+            let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
+            painter.text(
+                center,
+                Align2::CENTER_CENTER,
+                ch,
+                monospace.clone(),
+                Color32::LIGHT_GREEN,
+            );
+        }
+    }
+    fn render_wire_end(&self, ch: char, canvas: &Rect, pos: TextCoordinate, painter: &Painter) {
+        let top_left = canvas.left_top();
+        let delta_x = canvas.width() / self.num_cols as f32;
+        let delta_y = canvas.height() / self.num_rows as f32;
+        let pos_map = |pos: TextCoordinate| {
+            top_left
+                + vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y)
+                + vec2(0.5 * delta_x, 0.5 * delta_y)
+        };
+        let generator = generator::Generator::default();
+        let p0 = pos_map(pos);
+        let ops = match ch {
+            //  *  \
+            //  *  x  *
+            //  *  /
+            '>' => Some(generator.path_from_segments(
+                vec![
+                    move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
+                    line_to(p0 + vec2(0.5 * delta_x, 0.0)),
+                    line_to(p0 + vec2(-0.5 * delta_x, 0.2 * delta_y)),
+                    close_path(),
+                ],
+                &None,
+            )),
+            '<' => Some(generator.path_from_segments(
+                vec![
+                    move_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
+                    line_to(p0 + vec2(-0.5 * delta_x, 0.0)),
+                    line_to(p0 + vec2(0.5 * delta_x, 0.2 * delta_y)),
+                    close_path(),
+                ],
+                &None,
+            )),
+            'v' => Some(generator.path_from_segments(
+                vec![
+                    move_to(p0 + vec2(-delta_x, -0.2 * delta_y)),
+                    line_to(p0 + vec2(0.0, 0.2 * delta_y)),
+                    line_to(p0 + vec2(delta_x, -0.2 * delta_y)),
+                    close_path(),
+                ],
+                &None,
+            )),
+            '^' => Some(generator.path_from_segments(
+                vec![
+                    move_to(p0 + vec2(-delta_x, 0.2 * delta_y)),
+                    line_to(p0 + vec2(0.0, -0.2 * delta_y)),
+                    line_to(p0 + vec2(delta_x, 0.2 * delta_y)),
+                    close_path(),
+                ],
+                &None,
+            )),
+            'o' => Some(generator.circle(p0.x, p0.y, delta_x, &None)),
+            _ => None,
+        };
+        let Some(ops) = ops else {
+            return;
+        };
+        stroke_opset(ops, painter);
     }
     fn show_hover(&mut self, canvas: &Rect, pos: Pos2, painter: &Painter) {
         let top_left = canvas.left_top();
@@ -738,6 +915,49 @@ impl MyApp {
     }
 }
 
+impl TabViewer for MyApp {
+    type Tab = Tab;
+
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        match tab {
+            Tab::Ascii => "ASCII".into(),
+            Tab::Preview => "Preview".into(),
+        }
+    }
+
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+        match tab {
+            Tab::Ascii => {
+                egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+                    let desired_size = ui.available_size();
+                    let (resp, painter) =
+                        ui.allocate_painter(desired_size, Sense::click_and_drag());
+                    let canvas = resp.rect;
+                    self.draw_grid(&canvas, &painter);
+                    self.draw_text_buffer(&canvas, &painter);
+                    if let Some(pos) = resp.hover_pos() {
+                        self.show_hover(&canvas, pos, &painter);
+                    }
+                    if let Some(pos) = resp.interact_pointer_pos() {
+                        self.on_handle_interaction(&resp, &canvas, pos, &painter);
+                    }
+                    self.process_actions(ui);
+                    self.tool_specific_drawing(&canvas, &painter);
+                });
+            }
+            Tab::Preview => {
+                egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+                    let desired_size = ui.available_size();
+                    let (resp, painter) =
+                        ui.allocate_painter(desired_size, Sense::click_and_drag());
+                    let canvas = resp.rect;
+                    self.draw_rendered_schematic(&canvas, &painter);
+                });
+            }
+        }
+    }
+}
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -746,12 +966,17 @@ impl eframe::App for MyApp {
                     self.control_panel(ui);
                 });
                 self.resize_panel(ui);
+                let mut dockstate = self.dock_state.clone();
+                DockArea::new(&mut dockstate)
+                    .style(Style::from_egui(ui.style().as_ref()))
+                    .show_inside(ui, self);
+                self.dock_state = dockstate;
                 egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
                     let desired_size = ui.available_size();
                     let (resp, painter) =
                         ui.allocate_painter(desired_size, Sense::click_and_drag());
                     // Only use the left hand side
-                    let (canvas, canvas_right) = resp.rect.split_left_right_at_fraction(0.5);
+                    let (canvas, canvas_right) = resp.rect.split_left_right_at_fraction(0.7);
                     self.draw_grid(&canvas, &painter);
                     self.draw_text_buffer(&canvas, &painter);
                     if let Some(pos) = resp.hover_pos() {

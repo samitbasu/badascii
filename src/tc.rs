@@ -5,25 +5,25 @@ pub struct TextCoordinate {
 }
 
 impl TextCoordinate {
-    pub fn right(self) -> Self {
+    pub fn right(&self) -> Self {
         Self {
             x: self.x + 1,
             y: self.y,
         }
     }
-    pub fn left(self) -> Self {
+    pub fn left(&self) -> Self {
         Self {
             x: self.x.saturating_sub(1),
             y: self.y,
         }
     }
-    pub fn up(self) -> Self {
+    pub fn up(&self) -> Self {
         Self {
             x: self.x,
             y: self.y.saturating_sub(1),
         }
     }
-    pub fn down(self) -> Self {
+    pub fn down(&self) -> Self {
         Self {
             x: self.x,
             y: self.y + 1,
