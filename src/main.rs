@@ -58,8 +58,8 @@ const TEXT_SCALE_FACTOR: f32 = 1.5;
  */
 use eframe::egui;
 use egui::{
-    Align2, Button, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers, Painter, Pos2,
-    Rect, Response, Scene, Sense, Shape, Ui, Vec2,
+    Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
+    Options, Painter, Pos2, Rect, Response, Scene, Sense, Shape, Ui, Vec2,
     epaint::{CubicBezierShape, PathStroke},
     pos2, vec2,
 };
@@ -156,16 +156,17 @@ struct MyApp {
     dock_state: DockState<Tab>,
     scene_rect: Rect,
     drag_delta: Option<Vec2>,
+    rough_mode: bool,
 }
 
 const INITIAL_TEXT: &str = "
      +---------------------+
      |                     |
-    >| data           data |o
-     |                     |
-    o| full           next |>
-     |                     |
-    o| overflow  underflow |o   
++--->| data           data |o--+
+|    |                     |   |
+|   o| full           next |>  |
+v    |                     |   |
+    o| overflow  underflow |o--+
      |                     |
      +---------------------+
 ";
@@ -191,6 +192,7 @@ impl Default for MyApp {
             dock_state: DockState::new(vec![Tab::Ascii, Tab::Preview]),
             scene_rect: Rect::NAN,
             drag_delta: None,
+            rough_mode: true,
         }
     }
 }
@@ -543,6 +545,7 @@ impl MyApp {
             eprintln!("Elapsed {:?}", tic.elapsed());
             eprintln!("{:?}", rectangles);
         }
+        ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
     }
     fn resize_panel(&mut self, ui: &mut Ui) {
         if let Some(mut resize) = self.resize.take() {
@@ -629,6 +632,18 @@ impl MyApp {
             );
         }
     }
+    fn roughr_options(&self) -> roughr::core::Options {
+        if self.rough_mode {
+            roughr::core::Options::default()
+        } else {
+            roughr::core::Options {
+                disable_multi_stroke: Some(true),
+                max_randomness_offset: Some(0.0),
+                roughness: Some(0.0),
+                ..Default::default()
+            }
+        }
+    }
     fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter) {
         let mut rectangles = get_rectangles(&self.text);
         rectangles.extend(get_rectangles(&self.selected_text));
@@ -643,7 +658,7 @@ impl MyApp {
         };
         let wires = get_wires(&self.text);
         let generator = generator::Generator::default();
-        let options = None;
+        let options = Some(self.roughr_options());
         for wire in wires {
             let segments = wire
                 .segments
@@ -698,6 +713,7 @@ impl MyApp {
                 + vec2(0.5 * delta_x, 0.5 * delta_y)
         };
         let generator = generator::Generator::default();
+        let options = Some(self.roughr_options());
         let p0 = pos_map(pos);
         let ops = match ch {
             //  *  \
@@ -710,7 +726,7 @@ impl MyApp {
                     line_to(p0 + vec2(-0.5 * delta_x, 0.2 * delta_y)),
                     close_path(),
                 ],
-                &None,
+                &options,
             )),
             '<' => Some(generator.path_from_segments(
                 vec![
@@ -719,16 +735,16 @@ impl MyApp {
                     line_to(p0 + vec2(0.5 * delta_x, 0.2 * delta_y)),
                     close_path(),
                 ],
-                &None,
+                &options,
             )),
             'v' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(-delta_x, -0.2 * delta_y)),
+                    move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
                     line_to(p0 + vec2(0.0, 0.2 * delta_y)),
-                    line_to(p0 + vec2(delta_x, -0.2 * delta_y)),
+                    line_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
                     close_path(),
                 ],
-                &None,
+                &options,
             )),
             '^' => Some(generator.path_from_segments(
                 vec![
@@ -737,9 +753,9 @@ impl MyApp {
                     line_to(p0 + vec2(delta_x, 0.2 * delta_y)),
                     close_path(),
                 ],
-                &None,
+                &options,
             )),
-            'o' => Some(generator.circle(p0.x, p0.y, delta_x, &None)),
+            'o' => Some(generator.circle(p0.x, p0.y, delta_x, &options)),
             _ => None,
         };
         let Some(ops) = ops else {
@@ -884,6 +900,9 @@ impl MyApp {
             let (resp, painter) = ui.allocate_painter(desired_size, Sense::click_and_drag());
             let canvas = resp.rect;
             self.draw_rendered_schematic(&canvas, &painter);
+            if resp.dragged_by(egui::PointerButton::Secondary) {
+                self.drag_delta = Some(resp.drag_delta());
+            }
         });
     }
 }
