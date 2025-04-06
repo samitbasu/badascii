@@ -1,6 +1,7 @@
 pub mod action;
 pub mod analyze;
 pub mod rect;
+pub mod roughr_egui;
 pub mod tc;
 pub mod text_buffer;
 

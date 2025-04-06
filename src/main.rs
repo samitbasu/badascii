@@ -11,9 +11,12 @@ use badascii::{
     action::Action,
     analyze::{get_rectangles, get_wires},
     rect::Rectangle,
+    roughr_egui::{close_path, line_to, move_to, stroke_opset},
     tc::TextCoordinate,
     text_buffer::TextBuffer,
 };
+
+const TEXT_SCALE_FACTOR: f32 = 1.5;
 /**
  *
  *
@@ -56,7 +59,7 @@ use badascii::{
 use eframe::egui;
 use egui::{
     Align2, Button, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers, Painter, Pos2,
-    Rect, Response, Sense, Shape, Ui,
+    Rect, Response, Scene, Sense, Shape, Ui, Vec2,
     epaint::{CubicBezierShape, PathStroke},
     pos2, vec2,
 };
@@ -149,9 +152,10 @@ struct MyApp {
     copy_buffer: Option<String>,
     hover_pos: Option<TextCoordinate>,
     resize: Option<Resize>,
-    rand_pool: Vec<StdRng>,
     prev_action: Option<Action>,
     dock_state: DockState<Tab>,
+    scene_rect: Rect,
+    drag_delta: Option<Vec2>,
 }
 
 const INITIAL_TEXT: &str = "
@@ -172,14 +176,6 @@ impl Default for MyApp {
         let num_cols = 100;
         let mut text = TextBuffer::new(num_rows, num_cols);
         text.paste(INITIAL_TEXT, TextCoordinate { x: 20, y: 5 });
-        let seed = [
-            1, 0, 0, 0, 23, 0, 0, 0, 200, 1, 0, 0, 210, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0,
-        ];
-        let mut parent = rand::rngs::StdRng::from_seed(seed);
-        let rand_pool = (0..8)
-            .map(|_| StdRng::from_rng(&mut parent).unwrap())
-            .collect::<Vec<_>>();
         Self {
             snapshots: VecDeque::with_capacity(100),
             futures: Vec::new(),
@@ -191,62 +187,10 @@ impl Default for MyApp {
             copy_buffer: None,
             hover_pos: None,
             resize: None,
-            rand_pool,
             prev_action: None,
             dock_state: DockState::new(vec![Tab::Ascii, Tab::Preview]),
-        }
-    }
-}
-
-fn move_to(p: Pos2) -> PathSegment {
-    PathSegment::MoveTo {
-        abs: true,
-        x: p.x as f64,
-        y: p.y as f64,
-    }
-}
-
-fn line_to(p: Pos2) -> PathSegment {
-    PathSegment::LineTo {
-        abs: true,
-        x: p.x as f64,
-        y: p.y as f64,
-    }
-}
-
-fn close_path() -> PathSegment {
-    PathSegment::ClosePath { abs: true }
-}
-
-fn stroke_opset(ops: Drawable<f32>, painter: &Painter) {
-    for op_set in ops.sets {
-        if op_set.op_set_type != OpSetType::Path {
-            continue;
-        }
-        let mut pos = pos2(0.0, 0.0);
-        for op in op_set.ops {
-            match op.op {
-                OpType::Move => {
-                    pos = pos2(op.data[0], op.data[1]);
-                }
-                OpType::LineTo => {
-                    let new_pos = pos2(op.data[0], op.data[1]);
-                    painter.line_segment([pos, new_pos], (1.0, Color32::DARK_GREEN));
-                    pos = new_pos;
-                }
-                OpType::BCurveTo => {
-                    let cp1 = pos2(op.data[0], op.data[1]);
-                    let cp2 = pos2(op.data[2], op.data[3]);
-                    let end = pos2(op.data[4], op.data[5]);
-                    painter.add(Shape::CubicBezier(CubicBezierShape {
-                        points: [pos, cp1, cp2, end],
-                        closed: false,
-                        fill: Color32::TRANSPARENT,
-                        stroke: PathStroke::new(1.0, Color32::LIGHT_GREEN),
-                    }));
-                    pos = end;
-                }
-            }
+            scene_rect: Rect::NAN,
+            drag_delta: None,
         }
     }
 }
@@ -297,10 +241,12 @@ impl MyApp {
     fn clear_text(&mut self, position: &TextCoordinate) {
         self.text.set_text(position, None);
     }
-    fn on_drag_start(&mut self, tc: TextCoordinate) {
+    fn on_drag_start(&mut self, tc: TextCoordinate, resp: &Response) {
         match &self.tool {
             Tool::Selection(None) => {
-                self.tool = Tool::Selection(Some(tc));
+                if !resp.dragged_by(egui::PointerButton::Secondary) {
+                    self.tool = Tool::Selection(Some(tc));
+                }
             }
             Tool::Selected(rect) => {
                 self.tool = Tool::MovingText(MoveState {
@@ -670,7 +616,7 @@ impl MyApp {
     fn draw_text_buffer(&mut self, canvas: &Rect, painter: &Painter) {
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
-        let text_size = delta_x.min(delta_y);
+        let text_size = delta_x.min(delta_y) * TEXT_SCALE_FACTOR;
         let monospace = FontId::monospace(text_size);
         for (coord, ch) in self.text.iter() {
             let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
@@ -696,12 +642,9 @@ impl MyApp {
                 + vec2(0.5 * delta_x, 0.5 * delta_y)
         };
         let wires = get_wires(&self.text);
+        let generator = generator::Generator::default();
+        let options = None;
         for wire in wires {
-            let generator = generator::Generator::default();
-            let id = (egui::util::hash(&wire) % self.rand_pool.len() as u64) as usize;
-            let mut options = OptionsBuilder::default();
-            options.randomizer(self.rand_pool[id].clone());
-            let options = Some(options.build().unwrap());
             let segments = wire
                 .segments
                 .iter()
@@ -732,7 +675,7 @@ impl MyApp {
                 }
             }
         }
-        let text_size = delta_x.min(delta_y);
+        let text_size = delta_x.min(delta_y) * TEXT_SCALE_FACTOR;
         let monospace = FontId::monospace(text_size);
         for (coord, ch) in labels.iter() {
             let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
@@ -832,13 +775,18 @@ impl MyApp {
     ) {
         if let Some(text_coordinate) = self.map_pos_to_coords(canvas, pos) {
             if resp.drag_started() {
-                self.on_drag_start(text_coordinate);
+                self.on_drag_start(text_coordinate, resp);
             } else if resp.dragged() {
                 self.on_drag(text_coordinate, canvas, painter);
             } else if resp.drag_stopped() {
                 self.on_drag_stop(text_coordinate);
             } else if resp.clicked() {
                 self.on_click(text_coordinate);
+            }
+            if resp.dragged_by(egui::PointerButton::Secondary) {
+                self.drag_delta = Some(resp.drag_delta());
+            } else {
+                self.drag_delta = None;
             }
         }
     }
@@ -913,6 +861,31 @@ impl MyApp {
             self.on_action(action);
         }
     }
+    fn draw_ascii_widget(&mut self, ui: &mut Ui) {
+        egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+            let desired_size = ui.available_size();
+            let (resp, painter) = ui.allocate_painter(desired_size, Sense::click_and_drag());
+            let canvas = resp.rect;
+            self.draw_grid(&canvas, &painter);
+            self.draw_text_buffer(&canvas, &painter);
+            if let Some(pos) = resp.hover_pos() {
+                self.show_hover(&canvas, pos, &painter);
+            }
+            if let Some(pos) = resp.interact_pointer_pos() {
+                self.on_handle_interaction(&resp, &canvas, pos, &painter);
+            }
+            self.process_actions(ui);
+            self.tool_specific_drawing(&canvas, &painter);
+        });
+    }
+    fn draw_preview_widget(&mut self, ui: &mut Ui) {
+        egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+            let desired_size = ui.available_size();
+            let (resp, painter) = ui.allocate_painter(desired_size, Sense::click_and_drag());
+            let canvas = resp.rect;
+            self.draw_rendered_schematic(&canvas, &painter);
+        });
+    }
 }
 
 impl TabViewer for MyApp {
@@ -926,34 +899,25 @@ impl TabViewer for MyApp {
     }
 
     fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+        let scene = Scene::new()
+            .max_inner_size(vec2(1000.0, 800.0))
+            .zoom_range(0.5..=3.0);
+        let mut scene_rect = self.scene_rect;
         match tab {
             Tab::Ascii => {
-                egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                    let desired_size = ui.available_size();
-                    let (resp, painter) =
-                        ui.allocate_painter(desired_size, Sense::click_and_drag());
-                    let canvas = resp.rect;
-                    self.draw_grid(&canvas, &painter);
-                    self.draw_text_buffer(&canvas, &painter);
-                    if let Some(pos) = resp.hover_pos() {
-                        self.show_hover(&canvas, pos, &painter);
-                    }
-                    if let Some(pos) = resp.interact_pointer_pos() {
-                        self.on_handle_interaction(&resp, &canvas, pos, &painter);
-                    }
-                    self.process_actions(ui);
-                    self.tool_specific_drawing(&canvas, &painter);
+                scene.show(ui, &mut scene_rect, |ui| {
+                    self.draw_ascii_widget(ui);
                 });
             }
             Tab::Preview => {
-                egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                    let desired_size = ui.available_size();
-                    let (resp, painter) =
-                        ui.allocate_painter(desired_size, Sense::click_and_drag());
-                    let canvas = resp.rect;
-                    self.draw_rendered_schematic(&canvas, &painter);
+                scene.show(ui, &mut scene_rect, |ui| {
+                    self.draw_preview_widget(ui);
                 });
             }
+        }
+        self.scene_rect = scene_rect;
+        if let Some(delta) = self.drag_delta.take() {
+            self.scene_rect = self.scene_rect.translate(-delta);
         }
     }
 }
@@ -971,24 +935,6 @@ impl eframe::App for MyApp {
                     .style(Style::from_egui(ui.style().as_ref()))
                     .show_inside(ui, self);
                 self.dock_state = dockstate;
-                egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                    let desired_size = ui.available_size();
-                    let (resp, painter) =
-                        ui.allocate_painter(desired_size, Sense::click_and_drag());
-                    // Only use the left hand side
-                    let (canvas, canvas_right) = resp.rect.split_left_right_at_fraction(0.7);
-                    self.draw_grid(&canvas, &painter);
-                    self.draw_text_buffer(&canvas, &painter);
-                    if let Some(pos) = resp.hover_pos() {
-                        self.show_hover(&canvas, pos, &painter);
-                    }
-                    if let Some(pos) = resp.interact_pointer_pos() {
-                        self.on_handle_interaction(&resp, &canvas, pos, &painter);
-                    }
-                    self.process_actions(ui);
-                    self.tool_specific_drawing(&canvas, &painter);
-                    self.draw_rendered_schematic(&canvas_right, &painter);
-                });
                 match &self.tool {
                     Tool::Text(_) => {
                         ctx.set_cursor_icon(CursorIcon::Text);

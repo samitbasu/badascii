@@ -1,4 +1,4 @@
-use egui::ahash::{HashMap, HashSet};
+use egui::ahash::{self, HashMap, HashSet};
 
 use crate::{rect::Rectangle, tc::TextCoordinate, text_buffer::TextBuffer};
 
@@ -9,6 +9,13 @@ pub struct LineSegment {
 }
 
 impl LineSegment {
+    pub fn id(&self) -> u32 {
+        let sx = self.start.x & 0xFF;
+        let sy = self.start.y & 0xFF;
+        let ex = self.end.x & 0xFF;
+        let ey = self.end.y & 0xFF;
+        (ey << 24) | (ex << 16) | (sy << 8) | (sx)
+    }
     pub fn iter(&self) -> impl Iterator<Item = TextCoordinate> {
         let self_is_horiz = self.start.y == self.end.y;
         let iter_range = if self_is_horiz {
@@ -217,8 +224,10 @@ pub fn get_wires(tb: &TextBuffer) -> Vec<Wire> {
                 .get_mut(&attached.end)
                 .map(|t| t.remove(&attached));
         }
+        wire.sort_by_key(|a| a.id());
         wireset.push(Wire { segments: wire });
     }
+    wireset.sort_by_key(|x| x.segments.len());
     wireset
 }
 
