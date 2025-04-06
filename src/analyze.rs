@@ -1,4 +1,4 @@
-use egui::ahash::{self, HashMap, HashSet};
+use egui::ahash::{HashMap, HashSet};
 
 use crate::{rect::Rectangle, tc::TextCoordinate, text_buffer::TextBuffer};
 
@@ -63,7 +63,7 @@ impl LineSegment {
         }
     }
     fn extend(&mut self, other: &LineSegment) {
-        assert!(self.is_colinear(&other));
+        assert!(self.is_colinear(other));
         // Because the line segments are colinear,
         // we can compute the concatenated line segment
         // by taking the bounding "Rect", which will be degenerate.
@@ -324,7 +324,6 @@ pub fn get_rectangles(tb: &TextBuffer) -> HashSet<Rectangle> {
             .into_iter()
             .all(|x| tb.get(x) == Some('+'))
         {
-            eprintln!("Failed corner + check");
             continue;
         }
         ret.insert(Rectangle { corner_1, corner_2 }.normalize());

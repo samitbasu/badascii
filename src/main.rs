@@ -12,6 +12,7 @@ use badascii::{
     analyze::{get_rectangles, get_wires},
     rect::Rectangle,
     roughr_egui::{close_path, line_to, move_to, stroke_opset},
+    svg::RenderJob,
     tc::TextCoordinate,
     text_buffer::TextBuffer,
 };
@@ -58,18 +59,12 @@ const TEXT_SCALE_FACTOR: f32 = 1.5;
  */
 use eframe::egui;
 use egui::{
-    Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
-    Options, Painter, Pos2, Rect, Response, Scene, Sense, Shape, Ui, Vec2,
-    epaint::{CubicBezierShape, PathStroke},
-    pos2, vec2,
+    Align2, Button, Checkbox, Color32, ColorImage, CursorIcon, DragValue, Event, FontId, Key,
+    Modifiers, Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
+    util::hash, vec2,
 };
 use egui_dock::{DockArea, DockState, Style, TabViewer};
-use rand::{SeedableRng, rngs::StdRng};
-use roughr::{
-    PathSegment,
-    core::{Drawable, OpSetType, OpType, OptionsBuilder},
-    generator,
-};
+use roughr::generator;
 
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -131,8 +126,6 @@ fn map_key(key: &Key, modifiers: &Modifiers) -> Option<Action> {
 #[derive(Clone)]
 struct Snapshot {
     text: TextBuffer,
-    selected_text: TextBuffer,
-    tool: Tool,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -231,11 +224,15 @@ impl MyApp {
         while self.snapshots.len() >= 100 {
             self.snapshots.pop_front();
         }
-        self.snapshots.push_back(Snapshot {
-            text: self.text.clone(),
-            selected_text: self.selected_text.clone(),
-            tool: self.tool.clone(),
-        });
+        let mut text = self.text.clone();
+        for (pos, c) in self.selected_text.iter() {
+            text.set_text(&pos, Some(c))
+        }
+        let text_hash = hash(&text);
+        let last_hash = self.snapshots.back().map(|t| hash(&t.text)).unwrap_or(!0);
+        if text_hash != last_hash {
+            self.snapshots.push_back(Snapshot { text });
+        }
     }
     fn set_text(&mut self, ch: char, position: &TextCoordinate) {
         self.text.set_text(position, Some(ch));
@@ -294,10 +291,17 @@ impl MyApp {
         match &self.tool {
             Tool::Selection(Some(corner1)) => {
                 let selection = Rectangle::new(*corner1, corner2);
-                self.snapshot();
-                self.selected_text = self.text.clone();
-                self.text.clear_rectangle(selection);
-                self.tool = Tool::Selected(selection);
+                if selection
+                    .iter_interior()
+                    .any(|pos| self.text.get(pos).is_some())
+                {
+                    self.snapshot();
+                    self.selected_text = self.text.clone();
+                    self.text.clear_rectangle(selection);
+                    self.tool = Tool::Selected(selection);
+                } else {
+                    self.tool = Tool::Selection(None);
+                }
             }
             Tool::MovingText(MoveState {
                 selection,
@@ -308,7 +312,7 @@ impl MyApp {
                 for pos in selection.iter_interior() {
                     let selection = self.selected_text.get(pos);
                     let new_pos = pos.shifted(*origin, *move_pos);
-                    swap_buf.set_text(&new_pos, selection);
+                    swap_buf.merge_text(&new_pos, selection);
                 }
                 let selection_shifted = selection.shifted(*origin, *move_pos);
                 self.snapshot();
@@ -332,7 +336,7 @@ impl MyApp {
                 self.snapshot();
                 for pos in selection_box.iter_interior() {
                     let selection = self.selected_text.get(pos);
-                    self.text.set_text(&pos, selection);
+                    self.text.merge_text(&pos, selection);
                 }
                 self.selected_text.clear_all();
                 self.tool = Tool::Selection(None);
@@ -470,7 +474,6 @@ impl MyApp {
             Tool::Selection(None) => match action {
                 Action::Char('t') => self.tool = Tool::Text(None),
                 Action::Copy => {
-                    eprintln!("Copy of buffer");
                     self.copy_buffer = Some(self.text.render());
                 }
                 Action::Paste(txt) => {
@@ -488,7 +491,7 @@ impl MyApp {
             Tool::Selected(rect) if action == Action::Escape => {
                 for pos in rect.iter_interior() {
                     let selection = self.selected_text.get(pos);
-                    self.text.set_text(&pos, selection);
+                    self.text.merge_text(&pos, selection);
                 }
                 self.selected_text.clear_all();
                 self.tool = Tool::Selection(None);
@@ -508,16 +511,16 @@ impl MyApp {
         if let Some(buf) = self.snapshots.pop_back() {
             self.futures.push(buf.clone());
             self.text = buf.text;
-            self.selected_text = buf.selected_text;
-            self.tool = buf.tool;
+            self.selected_text.clear_all();
+            self.tool = Tool::Selection(None);
         }
     }
     fn redo(&mut self) {
         if let Some(buf) = self.futures.pop() {
-            self.snapshots.push_back(buf.clone());
             self.text = buf.text;
-            self.selected_text = buf.selected_text;
-            self.tool = buf.tool;
+            self.selected_text.clear_all();
+            self.tool = Tool::Selection(None);
+            self.snapshot();
         }
     }
     fn control_panel(&mut self, ui: &mut Ui) {
@@ -539,13 +542,23 @@ impl MyApp {
         {
             self.redo();
         }
-        if ui.button("☸").clicked() {
-            let tic = std::time::Instant::now();
-            let rectangles = get_rectangles(&self.text);
-            eprintln!("Elapsed {:?}", tic.elapsed());
-            eprintln!("{:?}", rectangles);
-        }
         ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
+        if ui.button("📋").clicked() {
+            let job = RenderJob {
+                width: self.num_cols as f32 * 10.0,
+                height: self.num_rows as f32 * 10.0,
+                num_cols: self.num_cols,
+                num_rows: self.num_rows,
+                labels: self.text.clone(),
+                options: self.roughr_options(),
+            };
+            let svg = badascii::svg::render(job);
+            ui.output_mut(|o| {
+                o.commands
+                    //                    .push(egui::OutputCommand::CopyText(self.text.render()))
+                    .push(egui::OutputCommand::CopyText(svg))
+            })
+        }
     }
     fn resize_panel(&mut self, ui: &mut Ui) {
         if let Some(mut resize) = self.resize.take() {
@@ -645,8 +658,6 @@ impl MyApp {
         }
     }
     fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter) {
-        let mut rectangles = get_rectangles(&self.text);
-        rectangles.extend(get_rectangles(&self.selected_text));
         let top_left = canvas.left_top();
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
@@ -809,6 +820,8 @@ impl MyApp {
     fn tool_specific_drawing(&self, canvas: &Rect, painter: &Painter) {
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
+        let text_size = delta_x.min(delta_y) * TEXT_SCALE_FACTOR;
+        let monospace = FontId::monospace(text_size);
         match self.tool {
             Tool::Text(Some(TextState { origin: _, cursor })) => {
                 let center = self.map_text_coordinate_to_cell_center(canvas, &cursor);
@@ -824,12 +837,11 @@ impl MyApp {
                 for (coord, ch) in self.selected_text.iter() {
                     if selection_box.contains(&coord) {
                         let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
-                        let monospace = FontId::monospace(10.0);
                         painter.text(
                             center,
                             Align2::CENTER_CENTER,
                             ch,
-                            monospace,
+                            monospace.clone(),
                             Color32::GREEN.linear_multiply(0.5),
                         );
                     }
@@ -845,8 +857,13 @@ impl MyApp {
                     let coord = coord.shifted(origin, move_pos);
                     if bbox_shifted.contains(&coord) {
                         let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
-                        let monospace = FontId::monospace(10.0);
-                        painter.text(center, Align2::CENTER_CENTER, ch, monospace, Color32::GREEN);
+                        painter.text(
+                            center,
+                            Align2::CENTER_CENTER,
+                            ch,
+                            monospace.clone(),
+                            Color32::GREEN,
+                        );
                     }
                 }
             }
@@ -909,6 +926,10 @@ impl MyApp {
 
 impl TabViewer for MyApp {
     type Tab = Tab;
+
+    fn closeable(&mut self, _tab: &mut Self::Tab) -> bool {
+        false
+    }
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
         match tab {

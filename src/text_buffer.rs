@@ -1,10 +1,23 @@
 use crate::{Resize, rect::Rectangle, tc::TextCoordinate};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash)]
 pub struct TextBuffer {
     buffer: Box<[Option<char>]>,
     num_rows: u32,
     num_cols: u32,
+}
+
+impl std::fmt::Display for TextBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Write;
+        for row in 0..self.num_rows {
+            for col in 0..self.num_cols {
+                f.write_char(self.buffer[(row * self.num_cols + col) as usize].unwrap_or(' '))?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
 }
 
 impl TextBuffer {
@@ -19,6 +32,11 @@ impl TextBuffer {
         let ch = if ch == Some(' ') { None } else { ch };
         if (0..self.num_cols).contains(&pos.x) && (0..self.num_rows).contains(&pos.y) {
             self.buffer[(pos.x + pos.y * self.num_cols) as usize] = ch;
+        }
+    }
+    pub fn merge_text(&mut self, pos: &TextCoordinate, ch: Option<char>) {
+        if let Some(ch) = ch {
+            self.set_text(pos, Some(ch));
         }
     }
     pub fn iter(&self) -> impl Iterator<Item = (TextCoordinate, char)> {
