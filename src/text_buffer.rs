@@ -58,7 +58,43 @@ impl TextBuffer {
             })
         })
     }
-
+    pub fn words(&self) -> impl Iterator<Item = (TextCoordinate, String)> {
+        let mut prev_location: Option<TextCoordinate> = None;
+        let mut start_location: Option<TextCoordinate> = None;
+        let mut buffer = String::new();
+        let mut iter = self.iter().fuse();
+        std::iter::from_fn(move || {
+            loop {
+                // Get the next character
+                if let Some((pos, ch)) = iter.next() {
+                    // Check to see if it is adjacent to prev_location
+                    if let Some(prev) = prev_location {
+                        // Check if pos is adjacent to pos
+                        if (pos.y == prev.y) && (prev.x + 1 == pos.x) {
+                            buffer.push(ch);
+                            prev_location = Some(pos);
+                        } else {
+                            prev_location = Some(pos);
+                            let old_start = start_location.take();
+                            start_location = Some(pos);
+                            let to_ret = std::mem::take(&mut buffer);
+                            buffer.push(ch);
+                            return old_start.map(|x| (x, to_ret));
+                        }
+                    } else {
+                        // First character... Stash it
+                        prev_location = Some(pos);
+                        start_location = Some(pos);
+                        buffer.push(ch);
+                    }
+                } else if !buffer.is_empty() {
+                    return start_location.map(|l| (l, std::mem::take(&mut buffer)));
+                } else {
+                    return None;
+                }
+            }
+        })
+    }
     pub fn clear_rectangle(&mut self, selection: Rectangle) {
         for pos in selection.iter_interior() {
             self.set_text(&pos, None);
@@ -130,5 +166,63 @@ impl TextBuffer {
             }
         }
         output
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use expect_test::expect;
+
+    use super::*;
+
+    #[test]
+    fn test_word_iterator() {
+        let test_text = "
+a bad 
+    ay  at_the office        
+        ";
+        let mut tb = TextBuffer::new(5, 30);
+        tb.paste(test_text, TextCoordinate { x: 1, y: 1 });
+        let words = tb.words().collect::<Vec<_>>();
+        let expect = expect![[r#"
+            [
+                (
+                    TextCoordinate {
+                        x: 1,
+                        y: 2,
+                    },
+                    "a",
+                ),
+                (
+                    TextCoordinate {
+                        x: 3,
+                        y: 2,
+                    },
+                    "bad",
+                ),
+                (
+                    TextCoordinate {
+                        x: 5,
+                        y: 3,
+                    },
+                    "ay",
+                ),
+                (
+                    TextCoordinate {
+                        x: 9,
+                        y: 3,
+                    },
+                    "at_the",
+                ),
+                (
+                    TextCoordinate {
+                        x: 16,
+                        y: 3,
+                    },
+                    "office",
+                ),
+            ]
+        "#]];
+        expect.assert_debug_eq(&words);
     }
 }

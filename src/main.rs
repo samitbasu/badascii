@@ -546,13 +546,13 @@ impl MyApp {
         if ui.button("📋").clicked() {
             let job = RenderJob {
                 width: self.num_cols as f32 * 10.0,
-                height: self.num_rows as f32 * 10.0,
+                height: self.num_rows as f32 * 15.0,
                 num_cols: self.num_cols,
                 num_rows: self.num_rows,
                 labels: self.text.clone(),
                 options: self.roughr_options(),
             };
-            let svg = badascii::svg::render(job);
+            let svg = badascii::svg::render(&job);
             ui.output_mut(|o| {
                 o.commands
                     //                    .push(egui::OutputCommand::CopyText(self.text.render()))
@@ -994,5 +994,25 @@ impl eframe::App for MyApp {
                 }
             })
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_svg_export() {
+        let mut tb = TextBuffer::new(30, 60);
+        tb.paste(INITIAL_TEXT, TextCoordinate { x: 5, y: 5 });
+        let svg = badascii::svg::render(&RenderJob {
+            width: 600.0,
+            height: 450.0,
+            num_cols: 60,
+            num_rows: 30,
+            labels: tb,
+            options: roughr::core::Options::default(),
+        });
+        std::fs::write("todo.svg", &svg).unwrap();
     }
 }

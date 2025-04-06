@@ -1,9 +1,8 @@
 use egui::Pos2;
-use egui::{Rect, pos2, vec2};
-use piet::RenderContext;
-use piet::kurbo;
+use egui::{pos2, vec2};
 use roughr::core::{Drawable, OpSetType, OpType};
 
+use crate::roughr_egui::close_path;
 use crate::{
     analyze::get_wires,
     roughr_egui::{line_to, move_to},
@@ -20,64 +19,113 @@ pub struct RenderJob {
     pub options: roughr::core::Options,
 }
 
-fn kurbify(p: Pos2) -> kurbo::Point {
-    kurbo::Point::new(p.x as f64, p.y as f64)
-}
-
-pub fn stroke_opset(ops: Drawable<f32>, painter: &mut piet_svg::RenderContext) {
+pub fn stroke_opset(ops: Drawable<f32>, mut painter: svg::Document) -> svg::Document {
     for op_set in ops.sets {
         if op_set.op_set_type != OpSetType::Path {
             continue;
         }
-        let mut pos = pos2(0.0, 0.0);
+        let mut data = svg::node::element::path::Data::new();
         for op in op_set.ops {
             match op.op {
                 OpType::Move => {
-                    pos = pos2(op.data[0], op.data[1]);
+                    data = data.move_to(op.data);
                 }
                 OpType::LineTo => {
-                    let new_pos = pos2(op.data[0], op.data[1]);
-                    painter.stroke(
-                        kurbo::Line::new(kurbify(pos), kurbify(new_pos)),
-                        &piet::Color::GREEN,
-                        1.0,
-                    );
-                    pos = new_pos;
+                    data = data.line_to(op.data);
                 }
                 OpType::BCurveTo => {
-                    let cp1 = pos2(op.data[0], op.data[1]);
-                    let cp2 = pos2(op.data[2], op.data[3]);
-                    let end = pos2(op.data[4], op.data[5]);
-                    painter.stroke(
-                        kurbo::CubicBez::new(
-                            kurbify(pos),
-                            kurbify(cp1),
-                            kurbify(cp2),
-                            kurbify(end),
-                        ),
-                        &piet::Color::GREEN,
-                        1.0,
-                    );
-                    pos = end;
+                    data = data.cubic_curve_to(op.data);
                 }
             }
         }
+        let path = svg::node::element::Path::new()
+            .set("fill", "none")
+            .set("stroke", "white")
+            .set("stroke-width", 1)
+            .set("d", data);
+        painter = painter.add(path);
     }
+    painter
 }
 
-pub fn render(job: RenderJob) -> String {
-    let mut context =
-        piet_svg::RenderContext::new(kurbo::Size::new(job.width.into(), job.height.into()));
+fn render_wire_end(
+    ch: char,
+    job: &RenderJob,
+    pos: TextCoordinate,
+    painter: svg::Document,
+) -> svg::Document {
+    let top_left = pos2(0.0, 0.0);
     let delta_x = job.width / job.num_cols as f32;
     let delta_y = job.height / job.num_rows as f32;
-    let mut labels = job.labels;
+    let pos_map = |pos: TextCoordinate| {
+        top_left
+            + vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y)
+            + vec2(0.5 * delta_x, 0.5 * delta_y)
+    };
+    let generator = roughr::generator::Generator::default();
+    let options = Some(job.options.clone());
+    let p0 = pos_map(pos);
+    let ops = match ch {
+        //  *  \
+        //  *  x  *
+        //  *  /
+        '>' => Some(generator.path_from_segments(
+            vec![
+                move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
+                line_to(p0 + vec2(0.5 * delta_x, 0.0)),
+                line_to(p0 + vec2(-0.5 * delta_x, 0.2 * delta_y)),
+                close_path(),
+            ],
+            &options,
+        )),
+        '<' => Some(generator.path_from_segments(
+            vec![
+                move_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
+                line_to(p0 + vec2(-0.5 * delta_x, 0.0)),
+                line_to(p0 + vec2(0.5 * delta_x, 0.2 * delta_y)),
+                close_path(),
+            ],
+            &options,
+        )),
+        'v' => Some(generator.path_from_segments(
+            vec![
+                move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
+                line_to(p0 + vec2(0.0, 0.2 * delta_y)),
+                line_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
+                close_path(),
+            ],
+            &options,
+        )),
+        '^' => Some(generator.path_from_segments(
+            vec![
+                move_to(p0 + vec2(-delta_x, 0.2 * delta_y)),
+                line_to(p0 + vec2(0.0, -0.2 * delta_y)),
+                line_to(p0 + vec2(delta_x, 0.2 * delta_y)),
+                close_path(),
+            ],
+            &options,
+        )),
+        'o' => Some(generator.circle(p0.x, p0.y, delta_x, &options)),
+        _ => None,
+    };
+    let Some(ops) = ops else {
+        return painter;
+    };
+    stroke_opset(ops, painter)
+}
+
+pub fn render(job: &RenderJob) -> String {
+    let mut context = svg::Document::new().set("viewBox", (0.0, 0.0, job.width, job.height));
+    let delta_x = job.width / job.num_cols as f32;
+    let delta_y = job.height / job.num_rows as f32;
+    let mut labels = job.labels.clone();
     let pos_map = |pos: TextCoordinate| {
         (vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y) + vec2(0.5 * delta_x, 0.5 * delta_y))
             .to_pos2()
     };
     let wires = get_wires(&labels);
     let generator = roughr::generator::Generator::default();
-    let options = Some(job.options);
+    let options = Some(job.options.clone());
     for wire in wires {
         let segments = wire
             .segments
@@ -94,34 +142,47 @@ pub fn render(job: RenderJob) -> String {
             }
         }
         let ops = generator.path_from_segments(segments, &options);
-        stroke_opset(ops, &mut context);
+        context = stroke_opset(ops, context);
         // Draw end things
-        /*         for segment in wire.segments {
-                   let pos = segment.start;
-                   if let Some(ch) = self.text.get(pos) {
-                       self.render_wire_end(ch, canvas, pos, painter);
-                       labels.set_text(&pos, None);
-                   }
-                   let pos = segment.end;
-                   if let Some(ch) = self.text.get(pos) {
-                       self.render_wire_end(ch, canvas, pos, painter);
-                       labels.set_text(&pos, None);
-                   }
-               }
-        */
+        for segment in wire.segments {
+            let pos = segment.start;
+            if let Some(ch) = job.labels.get(pos) {
+                context = render_wire_end(ch, job, pos, context);
+                labels.set_text(&pos, None);
+            }
+            let pos = segment.end;
+            if let Some(ch) = job.labels.get(pos) {
+                context = render_wire_end(ch, job, pos, context);
+                labels.set_text(&pos, None);
+            }
+        }
     }
-    /*     let text_size = delta_x.min(delta_y) * TEXT_SCALE_FACTOR;
-    let monospace = FontId::monospace(text_size);
-    for (coord, ch) in labels.iter() {
-        let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
-        painter.text(
-            center,
-            Align2::CENTER_CENTER,
-            ch,
-            monospace.clone(),
-            Color32::LIGHT_GREEN,
-        );
-    } */
-    context.finish();
-    context.display().to_string()
+    let text_size = delta_x.min(delta_y) * 1.6;
+    /*
+
+           let text = svg::node::element::Text::new(format!("{}", ndx * time_delta));
+       document = document.add(
+           svg::node::element::Line::new()
+               .set("x1", x)
+               .set("y1", 0)
+               .set("x2", x)
+               .set("y2", height)
+               .set("stroke", "#333333")
+               .set("stroke-width", 1.0),
+       );
+
+    */
+    for (coord, word) in labels.iter() {
+        let center = pos_map(coord);
+        let text = svg::node::element::Text::new(word)
+            .set("x", center.x)
+            .set("y", center.y)
+            .set("font-family", "monospace")
+            .set("font-size", text_size)
+            .set("text-anchor", "middle")
+            .set("dominant-baseline", "middle")
+            .set("fill", "#D4D4D4");
+        context = context.add(text);
+    }
+    context.to_string()
 }
