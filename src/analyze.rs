@@ -227,7 +227,7 @@ pub fn get_wires(tb: &TextBuffer) -> Vec<Wire> {
         wire.sort_by_key(|a| a.id());
         wireset.push(Wire { segments: wire });
     }
-    wireset.sort_by_key(|x| x.segments.len());
+    wireset.sort_by_key(|x| x.segments[0].id());
     wireset
 }
 

@@ -59,11 +59,12 @@ const TEXT_SCALE_FACTOR: f32 = 1.5;
  */
 use eframe::egui;
 use egui::{
-    Align2, Button, Checkbox, Color32, ColorImage, CursorIcon, DragValue, Event, FontId, Key,
+    Align2, Button, Checkbox, Color32, ComboBox, CursorIcon, DragValue, Event, FontId, Key,
     Modifiers, Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
     util::hash, vec2,
 };
 use egui_dock::{DockArea, DockState, Style, TabViewer};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 use roughr::generator;
 
 fn main() -> eframe::Result {
@@ -134,6 +135,12 @@ enum Tab {
     Preview,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum CopyMode {
+    Ascii,
+    Svg,
+}
+
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
@@ -150,6 +157,8 @@ struct MyApp {
     scene_rect: Rect,
     drag_delta: Option<Vec2>,
     rough_mode: bool,
+    reset_zoom: bool,
+    copy_mode: CopyMode,
 }
 
 const INITIAL_TEXT: &str = "
@@ -186,6 +195,8 @@ impl Default for MyApp {
             scene_rect: Rect::NAN,
             drag_delta: None,
             rough_mode: true,
+            reset_zoom: false,
+            copy_mode: CopyMode::Svg,
         }
     }
 }
@@ -543,21 +554,30 @@ impl MyApp {
             self.redo();
         }
         ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
+        let mut copy_mode = self.copy_mode;
+        egui::ComboBox::from_label("Copy mode")
+            .selected_text(format!("{:?}", copy_mode))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut copy_mode, CopyMode::Ascii, "ASCII");
+                ui.selectable_value(&mut copy_mode, CopyMode::Svg, "SVG");
+            });
+        self.copy_mode = copy_mode;
         if ui.button("📋").clicked() {
-            let job = RenderJob {
-                width: self.num_cols as f32 * 10.0,
-                height: self.num_rows as f32 * 15.0,
-                num_cols: self.num_cols,
-                num_rows: self.num_rows,
-                labels: self.text.clone(),
-                options: self.roughr_options(),
-            };
-            let svg = badascii::svg::render(&job);
-            ui.output_mut(|o| {
-                o.commands
-                    //                    .push(egui::OutputCommand::CopyText(self.text.render()))
-                    .push(egui::OutputCommand::CopyText(svg))
-            })
+            if self.copy_mode == CopyMode::Svg {
+                let job = RenderJob {
+                    width: self.num_cols as f32 * 10.0,
+                    height: self.num_rows as f32 * 15.0,
+                    num_cols: self.num_cols,
+                    num_rows: self.num_rows,
+                    labels: self.text.clone(),
+                    options: self.roughr_options(),
+                };
+                let svg = badascii::svg::render(&job);
+                ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
+            } else {
+                let ascii = self.text.render();
+                ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(ascii)))
+            }
         }
     }
     fn resize_panel(&mut self, ui: &mut Ui) {
@@ -669,8 +689,15 @@ impl MyApp {
         };
         let wires = get_wires(&self.text);
         let generator = generator::Generator::default();
-        let options = Some(self.roughr_options());
+        let options = self.roughr_options();
+        // The RNG does not really work.  Each time we draw something,
+        // the options struct is cloned which means that each wire is
+        // drawn with the same RNG state at the beginning.
+        let mut rng = StdRng::seed_from_u64(0xDEAD_BEEF);
         for wire in wires {
+            let mut options = options.clone();
+            options.randomizer = Some(StdRng::seed_from_u64(rng.next_u64()));
+            let options = Some(options);
             let segments = wire
                 .segments
                 .iter()
@@ -732,36 +759,36 @@ impl MyApp {
             //  *  /
             '>' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
-                    line_to(p0 + vec2(0.5 * delta_x, 0.0)),
-                    line_to(p0 + vec2(-0.5 * delta_x, 0.2 * delta_y)),
+                    move_to(p0 + vec2(0.0 * delta_x, -0.3 * delta_y)),
+                    line_to(p0 + vec2(1.0 * delta_x, 0.0)),
+                    line_to(p0 + vec2(0.0 * delta_x, 0.3 * delta_y)),
                     close_path(),
                 ],
                 &options,
             )),
             '<' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
-                    line_to(p0 + vec2(-0.5 * delta_x, 0.0)),
-                    line_to(p0 + vec2(0.5 * delta_x, 0.2 * delta_y)),
+                    move_to(p0 + vec2(0.0 * delta_x, -0.3 * delta_y)),
+                    line_to(p0 + vec2(-1.0 * delta_x, 0.0)),
+                    line_to(p0 + vec2(0.0 * delta_x, 0.3 * delta_y)),
                     close_path(),
                 ],
                 &options,
             )),
             'v' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
-                    line_to(p0 + vec2(0.0, 0.2 * delta_y)),
-                    line_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
+                    move_to(p0 + vec2(-0.7 * delta_x, 0.0 * delta_y)),
+                    line_to(p0 + vec2(0.0, 1.0 * delta_y)),
+                    line_to(p0 + vec2(0.7 * delta_x, 0.0 * delta_y)),
                     close_path(),
                 ],
                 &options,
             )),
             '^' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(-delta_x, 0.2 * delta_y)),
-                    line_to(p0 + vec2(0.0, -0.2 * delta_y)),
-                    line_to(p0 + vec2(delta_x, 0.2 * delta_y)),
+                    move_to(p0 + vec2(-0.7 * delta_x, 0.0 * delta_y)),
+                    line_to(p0 + vec2(0.0, -1.0 * delta_y)),
+                    line_to(p0 + vec2(0.7 * delta_x, 0.0 * delta_y)),
                     close_path(),
                 ],
                 &options,
@@ -903,12 +930,29 @@ impl MyApp {
             self.draw_text_buffer(&canvas, &painter);
             if let Some(pos) = resp.hover_pos() {
                 self.show_hover(&canvas, pos, &painter);
+                match &self.tool {
+                    Tool::Text(_) => {
+                        ui.ctx().set_cursor_icon(CursorIcon::Text);
+                    }
+                    Tool::Selected(..) => {
+                        ui.ctx().set_cursor_icon(CursorIcon::Grab);
+                    }
+                    Tool::MovingText(..) => {
+                        ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+                    }
+                    _ => {
+                        ui.ctx().set_cursor_icon(CursorIcon::Default);
+                    }
+                }
             }
             if let Some(pos) = resp.interact_pointer_pos() {
                 self.on_handle_interaction(&resp, &canvas, pos, &painter);
             }
             self.process_actions(ui);
             self.tool_specific_drawing(&canvas, &painter);
+            if resp.double_clicked() {
+                self.reset_zoom = true;
+            }
         });
     }
     fn draw_preview_widget(&mut self, ui: &mut Ui) {
@@ -919,6 +963,9 @@ impl MyApp {
             self.draw_rendered_schematic(&canvas, &painter);
             if resp.dragged_by(egui::PointerButton::Secondary) {
                 self.drag_delta = Some(resp.drag_delta());
+            }
+            if resp.double_clicked() {
+                self.reset_zoom = true;
             }
         });
     }
@@ -943,6 +990,7 @@ impl TabViewer for MyApp {
             .max_inner_size(vec2(1000.0, 800.0))
             .zoom_range(0.5..=3.0);
         let mut scene_rect = self.scene_rect;
+        self.reset_zoom = false;
         match tab {
             Tab::Ascii => {
                 scene.show(ui, &mut scene_rect, |ui| {
@@ -958,6 +1006,9 @@ impl TabViewer for MyApp {
         self.scene_rect = scene_rect;
         if let Some(delta) = self.drag_delta.take() {
             self.scene_rect = self.scene_rect.translate(-delta);
+        }
+        if self.reset_zoom {
+            self.scene_rect = Rect::ZERO;
         }
     }
 }
@@ -975,20 +1026,6 @@ impl eframe::App for MyApp {
                     .style(Style::from_egui(ui.style().as_ref()))
                     .show_inside(ui, self);
                 self.dock_state = dockstate;
-                match &self.tool {
-                    Tool::Text(_) => {
-                        ctx.set_cursor_icon(CursorIcon::Text);
-                    }
-                    Tool::Selected(..) => {
-                        ctx.set_cursor_icon(CursorIcon::Grab);
-                    }
-                    Tool::MovingText(..) => {
-                        ctx.set_cursor_icon(CursorIcon::Grabbing);
-                    }
-                    _ => {
-                        ctx.set_cursor_icon(CursorIcon::Default);
-                    }
-                }
                 if let Some(txt) = std::mem::take(&mut self.copy_buffer) {
                     ctx.copy_text(txt);
                 }
@@ -1014,5 +1051,53 @@ mod tests {
             options: roughr::core::Options::default(),
         });
         std::fs::write("todo.svg", &svg).unwrap();
+    }
+
+    #[test]
+    fn test_roughr_randomness() {
+        const TEST_TEXT: &str = "
+                                                                             
+       +---------------------+                                               
+       |                     |                                               
+  +--->| data           data |o--+                                           
+  |    |                     |   |                                           
+  |   o| full           next |>  |                                           
+  v    |                     |   |                                           
+      o| overflow  underflow |o--+                                           
+       |                     |                                               
+       +---------------------+                                               
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                 +---------------------+     
+                                                 |                     |     
+                                            +--->| data           data |o--+ 
+                                            |    |                     |   | 
+                                            |   o| full           next |>  | 
+                                            v    |                     |   | 
+                                                o| overflow  underflow |o--+ 
+        +---------------------+                  |                     |     
+        |                     |                  +---------------------+     
+   +--->| data           data |o--+                                          
+   |    |                     |   |                                          
+   |   o| full           next |>  |                                          
+   v    |                     |   |                                          
+       o| overflow  underflow |o--+                                          
+        |                     |                                              
+        +---------------------+                                              
+                                                                                     
+        ";
+        let mut tb = TextBuffer::new(40, 100);
+        tb.paste(TEST_TEXT, TextCoordinate { x: 5, y: 5 });
+        let svg = badascii::svg::render(&RenderJob {
+            width: 1000.0,
+            height: 40.0 * 15.0,
+            num_cols: 100,
+            num_rows: 40,
+            labels: tb,
+            options: roughr::core::Options::default(),
+        });
+        std::fs::write("rough.svg", &svg).unwrap();
     }
 }
