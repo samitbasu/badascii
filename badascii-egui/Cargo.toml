@@ -11,7 +11,7 @@ egui_extras = "0.31.1"
 env_logger = "0.11.7"
 rand = "0.8.5"
 roughr = "0.9.0"
-svg = "0.18.0"
+badascii-backend = { path = "../badascii-backend" }
 
 [dev-dependencies]
 expect-test = "1.5.1"

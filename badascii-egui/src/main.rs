@@ -6,16 +6,12 @@
 
 use std::collections::VecDeque;
 
-use badascii::{
-    Resize,
-    action::Action,
-    analyze::{get_rectangles, get_wires},
-    rect::Rectangle,
-    roughr_egui::{close_path, line_to, move_to, stroke_opset},
-    svg::RenderJob,
-    tc::TextCoordinate,
+use badascii_backend::{
+    rect::Rectangle, render::RenderJob, tc::TextCoordinate, text_buffer::Resize,
     text_buffer::TextBuffer,
 };
+
+use badascii::{action::Action, roughr_egui::stroke_opset};
 
 const TEXT_SCALE_FACTOR: f32 = 1.5;
 /**
@@ -569,10 +565,10 @@ impl MyApp {
                     height: self.num_rows as f32 * 15.0,
                     num_cols: self.num_cols,
                     num_rows: self.num_rows,
-                    labels: self.text.clone(),
+                    text: self.text.clone(),
                     options: self.roughr_options(),
                 };
-                let svg = badascii::svg::render(&job);
+                let svg = badascii_backend::svg::render(&job);
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
             } else {
                 let ascii = self.text.render();

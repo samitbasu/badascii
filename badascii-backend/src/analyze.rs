@@ -1,4 +1,4 @@
-use egui::ahash::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::{rect::Rectangle, tc::TextCoordinate, text_buffer::TextBuffer};
 
