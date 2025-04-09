@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{rect::Rectangle, tc::TextCoordinate, text_buffer::TextBuffer};
+use crate::{tc::TextCoordinate, text_buffer::TextBuffer};
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub struct LineSegment {
@@ -98,10 +98,6 @@ impl LineSegment {
     }
 }
 
-fn line_segment(start: TextCoordinate, end: TextCoordinate) -> LineSegment {
-    LineSegment { start, end }
-}
-
 #[derive(Debug)]
 enum State {
     Blank,
@@ -116,12 +112,6 @@ enum Class {
     End,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-enum DirectedLine {
-    Horiz(LineSegment),
-    Vert(LineSegment),
-}
-
 fn classify(ch: char) -> Option<Class> {
     match ch {
         '+' | 'o' | '<' | '>' | '^' | 'v' => Some(Class::Term),
@@ -129,30 +119,6 @@ fn classify(ch: char) -> Option<Class> {
         '|' => Some(Class::VertEdge),
         _ => None,
     }
-}
-
-// We apply the constraint that for horizontal lines,
-// that the start is to the left of end
-fn mk_horiz(ls: LineSegment) -> DirectedLine {
-    assert_eq!(ls.end.y, ls.start.y);
-    let y = ls.end.y;
-    let min_x = ls.start.x.min(ls.end.x);
-    let max_x = ls.start.x.max(ls.end.x);
-    DirectedLine::Horiz(LineSegment {
-        start: TextCoordinate { x: min_x, y },
-        end: TextCoordinate { x: max_x, y },
-    })
-}
-
-fn mk_vert(ls: LineSegment) -> DirectedLine {
-    assert_eq!(ls.end.x, ls.start.x);
-    let x = ls.end.x;
-    let min_y = ls.start.y.min(ls.end.y);
-    let max_y = ls.start.y.max(ls.end.y);
-    DirectedLine::Vert(LineSegment {
-        start: TextCoordinate { x, y: min_y },
-        end: TextCoordinate { x, y: max_y },
-    })
 }
 
 #[derive(Debug, Hash)]
@@ -229,106 +195,6 @@ pub fn get_wires(tb: &TextBuffer) -> Vec<Wire> {
     }
     wireset.sort_by_key(|x| x.segments[0].id());
     wireset
-}
-
-pub fn get_rectangles(tb: &TextBuffer) -> HashSet<Rectangle> {
-    let horz_segments = get_horizontal_line_segments(tb);
-    let vert_segments = get_vertical_line_segments(tb);
-    let mut corner_map = HashMap::<TextCoordinate, HashSet<DirectedLine>>::default();
-    for (corner, ls) in horz_segments
-        .iter()
-        .flat_map(|ls| [(ls.start, mk_horiz(*ls)), (ls.end, mk_horiz(*ls))])
-        .chain(
-            vert_segments
-                .iter()
-                .flat_map(|ls| [(ls.start, mk_vert(*ls)), (ls.end, mk_vert(*ls))]),
-        )
-    {
-        corner_map.entry(corner).or_default().insert(ls);
-    }
-
-    let mut ret = HashSet::default();
-    for (&corner_1, edges) in corner_map.iter() {
-        let Some(horiz) = edges.iter().find_map(|x| match x {
-            DirectedLine::Horiz(line) => Some(*line),
-            _ => None,
-        }) else {
-            continue;
-        };
-        let Some(vert) = edges.iter().find_map(|x| match x {
-            DirectedLine::Vert(line) => Some(*line),
-            _ => None,
-        }) else {
-            continue;
-        };
-        let opposite_x = if horiz.start.x == corner_1.x {
-            horiz.end.x
-        } else {
-            horiz.start.x
-        };
-        let opposite_y = if vert.start.y == corner_1.y {
-            vert.end.y
-        } else {
-            vert.start.y
-        };
-        let corner_2 = TextCoordinate {
-            x: opposite_x,
-            y: opposite_y,
-        };
-        if !corner_map.contains_key(&corner_2) {
-            continue;
-        }
-        let candidate = Rectangle { corner_1, corner_2 }.normalize();
-        let top = mk_horiz(line_segment(candidate.left_top(), candidate.right_top()));
-        let right = mk_vert(line_segment(
-            candidate.right_top(),
-            candidate.right_bottom(),
-        ));
-        let left = mk_vert(line_segment(candidate.left_top(), candidate.left_bottom()));
-        let bottom = mk_horiz(line_segment(
-            candidate.left_bottom(),
-            candidate.right_bottom(),
-        ));
-        let Some(top_left_edges) = corner_map.get(&candidate.left_top()) else {
-            continue;
-        };
-        if !top_left_edges.contains(&top) || !top_left_edges.contains(&left) {
-            continue;
-        }
-        let Some(bottom_right_edges) = corner_map.get(&candidate.right_bottom()) else {
-            continue;
-        };
-        if !bottom_right_edges.contains(&bottom) || !bottom_right_edges.contains(&right) {
-            continue;
-        }
-        let corner_1 = candidate.left_top();
-        let corner_2 = candidate.right_bottom();
-        let corner_3 = candidate.right_top();
-        let corner_4 = candidate.left_bottom();
-        // Check for empty corners
-        let extended_spaces = [
-            corner_1.up(),
-            corner_1.left(),
-            corner_2.down(),
-            corner_2.right(),
-            corner_3.right(),
-            corner_3.up(),
-            corner_4.left(),
-            corner_4.down(),
-        ];
-        if extended_spaces.into_iter().any(|x| tb.get(x).is_some()) {
-            continue;
-        }
-        // Check that corners are marked with '+'
-        if ![corner_1, corner_2, corner_3, corner_4]
-            .into_iter()
-            .all(|x| tb.get(x) == Some('+'))
-        {
-            continue;
-        }
-        ret.insert(Rectangle { corner_1, corner_2 }.normalize());
-    }
-    ret
 }
 
 const EOB: (TextCoordinate, Class) = (
@@ -420,34 +286,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_basic_rect() {
-        const BASIC_EXAMPLE: &str = "
-   +-----+
-   |     |
-   +-----+        
-        ";
-        let mut text_buffer = TextBuffer::new(20, 20);
-        text_buffer.paste(BASIC_EXAMPLE, TextCoordinate { x: 1, y: 1 });
-        let rects = get_rectangles(&text_buffer);
-        assert!(rects.len() == 1);
-    }
-
-    #[test]
-    fn test_extract_mis_hits() {
-        const CUP_EXAMPLE: &str = "
-+-----+
-      |
-      |
-      |
-+-----+
-";
-        let mut text_buffer = TextBuffer::new(20, 20);
-        text_buffer.paste(CUP_EXAMPLE, TextCoordinate { x: 1, y: 1 });
-        let rects = get_rectangles(&text_buffer);
-        assert!(rects.is_empty());
-    }
-
-    #[test]
     fn test_extract_wires() {
         const CUP_EXAMPLE: &str = "
 +-----+
@@ -460,38 +298,6 @@ mod tests {
         text_buffer.paste(CUP_EXAMPLE, TextCoordinate { x: 1, y: 1 });
         let wires = get_wires(&text_buffer);
         assert_eq!(wires.len(), 2);
-    }
-
-    #[test]
-    fn test_empty_corners_checked() {
-        const NONEMPTY_CORNER_EXAMPLE: &str = "
-----+-----+
-    |     |
-    +-----+        
-        ";
-        let mut text_buffer = TextBuffer::new(20, 20);
-        text_buffer.paste(NONEMPTY_CORNER_EXAMPLE, TextCoordinate { x: 1, y: 1 });
-        let rects = get_rectangles(&text_buffer);
-        assert!(rects.is_empty());
-    }
-
-    #[test]
-    fn test_initial_diagram() {
-        const INITIAL_TEXT: &str = "
-     +---------------------+
-     |                     |
-    >| data           data |o
-     |                     |
-    o| full           next |>
-     |                     |
-    o| overflow  underflow |o   
-     |                     |
-     +---------------------+
-";
-        let mut buffer = TextBuffer::new(40, 40);
-        buffer.paste(INITIAL_TEXT, TextCoordinate { x: 4, y: 4 });
-        let rects = get_rectangles(&buffer);
-        assert_eq!(rects.len(), 1);
     }
 
     #[test]

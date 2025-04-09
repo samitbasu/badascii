@@ -1,10 +1,8 @@
 use roughr::core::{Drawable, OpSetType, OpType};
 
 use crate::{
-    analyze::get_wires,
     render::{RenderJob, vec2},
     tc::TextCoordinate,
-    text_buffer::TextBuffer,
 };
 
 pub fn stroke_opset(ops: Drawable<f32>, mut painter: svg::Document) -> svg::Document {
@@ -66,6 +64,8 @@ pub fn render(job: &RenderJob) -> String {
 #[cfg(test)]
 mod tests {
     use expect_test::expect_file;
+
+    use crate::text_buffer::TextBuffer;
 
     use super::*;
 
