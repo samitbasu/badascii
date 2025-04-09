@@ -567,6 +567,8 @@ impl MyApp {
                     num_rows: self.num_rows,
                     text: self.text.clone(),
                     options: self.roughr_options(),
+                    x0: 0.0,
+                    y0: 0.0,
                 };
                 let svg = badascii_backend::svg::render(&job);
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
@@ -675,58 +677,25 @@ impl MyApp {
     }
     fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter) {
         let top_left = canvas.left_top();
+        let job = RenderJob {
+            width: canvas.width(),
+            height: canvas.height(),
+            num_cols: self.num_cols,
+            num_rows: self.num_rows,
+            text: self.text.clone(),
+            options: self.roughr_options(),
+            x0: top_left.x,
+            y0: top_left.y,
+        };
+        let (tb, ops) = job.invoke();
+        for op in ops {
+            stroke_opset(op, painter);
+        }
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
-        let mut labels = self.text.clone();
-        let pos_map = |pos: TextCoordinate| {
-            top_left
-                + vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y)
-                + vec2(0.5 * delta_x, 0.5 * delta_y)
-        };
-        let wires = get_wires(&self.text);
-        let generator = generator::Generator::default();
-        let options = self.roughr_options();
-        // The RNG does not really work.  Each time we draw something,
-        // the options struct is cloned which means that each wire is
-        // drawn with the same RNG state at the beginning.
-        let mut rng = StdRng::seed_from_u64(0xDEAD_BEEF);
-        for wire in wires {
-            let mut options = options.clone();
-            options.randomizer = Some(StdRng::seed_from_u64(rng.next_u64()));
-            let options = Some(options);
-            let segments = wire
-                .segments
-                .iter()
-                .flat_map(|ls| {
-                    let p0 = pos_map(ls.start);
-                    let p1 = pos_map(ls.end);
-                    [move_to(p0), line_to(p1)]
-                })
-                .collect();
-            for segment in &wire.segments {
-                for pt in segment.iter() {
-                    labels.set_text(&pt, None);
-                }
-            }
-            let ops = generator.path_from_segments(segments, &options);
-            stroke_opset(ops, painter);
-            // Draw end things
-            for segment in wire.segments {
-                let pos = segment.start;
-                if let Some(ch) = self.text.get(pos) {
-                    self.render_wire_end(ch, canvas, pos, painter);
-                    labels.set_text(&pos, None);
-                }
-                let pos = segment.end;
-                if let Some(ch) = self.text.get(pos) {
-                    self.render_wire_end(ch, canvas, pos, painter);
-                    labels.set_text(&pos, None);
-                }
-            }
-        }
         let text_size = delta_x.min(delta_y) * TEXT_SCALE_FACTOR;
         let monospace = FontId::monospace(text_size);
-        for (coord, ch) in labels.iter() {
+        for (coord, ch) in tb.iter() {
             let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
             painter.text(
                 center,
@@ -736,66 +705,6 @@ impl MyApp {
                 Color32::LIGHT_GREEN,
             );
         }
-    }
-    fn render_wire_end(&self, ch: char, canvas: &Rect, pos: TextCoordinate, painter: &Painter) {
-        let top_left = canvas.left_top();
-        let delta_x = canvas.width() / self.num_cols as f32;
-        let delta_y = canvas.height() / self.num_rows as f32;
-        let pos_map = |pos: TextCoordinate| {
-            top_left
-                + vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y)
-                + vec2(0.5 * delta_x, 0.5 * delta_y)
-        };
-        let generator = generator::Generator::default();
-        let options = Some(self.roughr_options());
-        let p0 = pos_map(pos);
-        let ops = match ch {
-            //  *  \
-            //  *  x  *
-            //  *  /
-            '>' => Some(generator.path_from_segments(
-                vec![
-                    move_to(p0 + vec2(0.0 * delta_x, -0.3 * delta_y)),
-                    line_to(p0 + vec2(1.0 * delta_x, 0.0)),
-                    line_to(p0 + vec2(0.0 * delta_x, 0.3 * delta_y)),
-                    close_path(),
-                ],
-                &options,
-            )),
-            '<' => Some(generator.path_from_segments(
-                vec![
-                    move_to(p0 + vec2(0.0 * delta_x, -0.3 * delta_y)),
-                    line_to(p0 + vec2(-1.0 * delta_x, 0.0)),
-                    line_to(p0 + vec2(0.0 * delta_x, 0.3 * delta_y)),
-                    close_path(),
-                ],
-                &options,
-            )),
-            'v' => Some(generator.path_from_segments(
-                vec![
-                    move_to(p0 + vec2(-0.7 * delta_x, 0.0 * delta_y)),
-                    line_to(p0 + vec2(0.0, 1.0 * delta_y)),
-                    line_to(p0 + vec2(0.7 * delta_x, 0.0 * delta_y)),
-                    close_path(),
-                ],
-                &options,
-            )),
-            '^' => Some(generator.path_from_segments(
-                vec![
-                    move_to(p0 + vec2(-0.7 * delta_x, 0.0 * delta_y)),
-                    line_to(p0 + vec2(0.0, -1.0 * delta_y)),
-                    line_to(p0 + vec2(0.7 * delta_x, 0.0 * delta_y)),
-                    close_path(),
-                ],
-                &options,
-            )),
-            'o' => Some(generator.circle(p0.x, p0.y, delta_x, &options)),
-            _ => None,
-        };
-        let Some(ops) = ops else {
-            return;
-        };
-        stroke_opset(ops, painter);
     }
     fn show_hover(&mut self, canvas: &Rect, pos: Pos2, painter: &Painter) {
         let top_left = canvas.left_top();
@@ -1027,73 +936,5 @@ impl eframe::App for MyApp {
                 }
             })
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_svg_export() {
-        let mut tb = TextBuffer::new(30, 60);
-        tb.paste(INITIAL_TEXT, TextCoordinate { x: 5, y: 5 });
-        let svg = badascii::svg::render(&RenderJob {
-            width: 600.0,
-            height: 450.0,
-            num_cols: 60,
-            num_rows: 30,
-            labels: tb,
-            options: roughr::core::Options::default(),
-        });
-        std::fs::write("todo.svg", &svg).unwrap();
-    }
-
-    #[test]
-    fn test_roughr_randomness() {
-        const TEST_TEXT: &str = "
-                                                                             
-       +---------------------+                                               
-       |                     |                                               
-  +--->| data           data |o--+                                           
-  |    |                     |   |                                           
-  |   o| full           next |>  |                                           
-  v    |                     |   |                                           
-      o| overflow  underflow |o--+                                           
-       |                     |                                               
-       +---------------------+                                               
-                                                                             
-                                                                             
-                                                                             
-                                                                             
-                                                 +---------------------+     
-                                                 |                     |     
-                                            +--->| data           data |o--+ 
-                                            |    |                     |   | 
-                                            |   o| full           next |>  | 
-                                            v    |                     |   | 
-                                                o| overflow  underflow |o--+ 
-        +---------------------+                  |                     |     
-        |                     |                  +---------------------+     
-   +--->| data           data |o--+                                          
-   |    |                     |   |                                          
-   |   o| full           next |>  |                                          
-   v    |                     |   |                                          
-       o| overflow  underflow |o--+                                          
-        |                     |                                              
-        +---------------------+                                              
-                                                                                     
-        ";
-        let mut tb = TextBuffer::new(40, 100);
-        tb.paste(TEST_TEXT, TextCoordinate { x: 5, y: 5 });
-        let svg = badascii::svg::render(&RenderJob {
-            width: 1000.0,
-            height: 40.0 * 15.0,
-            num_cols: 100,
-            num_rows: 40,
-            labels: tb,
-            options: roughr::core::Options::default(),
-        });
-        std::fs::write("rough.svg", &svg).unwrap();
     }
 }
