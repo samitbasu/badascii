@@ -159,7 +159,13 @@ impl TextBuffer {
                 .map(|c| c.unwrap_or(' '))
                 .chain(std::iter::once('\n'))
         });
-        t.collect()
+        let buf: String = t.collect();
+        let buf = buf
+            .split('\n')
+            .map(|x| x.trim_ascii_end())
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>();
+        buf.join("\n")
     }
 
     pub fn resize(&self, resize: Resize) -> TextBuffer {
@@ -179,6 +185,24 @@ mod tests {
     use expect_test::expect;
 
     use super::*;
+
+    #[test]
+    fn test_trailing_whitespace_trimmed_on_render() {
+        let test_text = "
+     +--+     
+     |  |   
+     +--+   
+        ";
+        let mut tb = TextBuffer::new(10, 20);
+        tb.paste(test_text, TextCoordinate { x: 0, y: 1 });
+        let render = tb.render();
+        assert_eq!(
+            render,
+            "     +--+
+     |  |
+     +--+"
+        );
+    }
 
     #[test]
     fn test_word_iterator() {

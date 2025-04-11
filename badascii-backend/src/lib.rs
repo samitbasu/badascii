@@ -4,3 +4,4 @@ pub mod render;
 pub mod svg;
 pub mod tc;
 pub mod text_buffer;
+pub use roughr::core::Options;

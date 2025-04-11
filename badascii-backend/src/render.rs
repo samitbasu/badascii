@@ -73,9 +73,9 @@ impl RenderJob {
             //  *  /
             '>' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
-                    line_to(p0 + vec2(0.5 * delta_x, 0.0)),
-                    line_to(p0 + vec2(-0.5 * delta_x, 0.2 * delta_y)),
+                    move_to(p0 + vec2(0.0, -0.3 * delta_y)),
+                    line_to(p0 + vec2(1.0 * delta_x, 0.0)),
+                    line_to(p0 + vec2(0.0, 0.3 * delta_y)),
                     close_path(),
                 ],
                 &options,
@@ -83,7 +83,7 @@ impl RenderJob {
             '<' => Some(generator.path_from_segments(
                 vec![
                     move_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
-                    line_to(p0 + vec2(-0.5 * delta_x, 0.0)),
+                    line_to(p0 + vec2(-1.0 * delta_x, 0.0)),
                     line_to(p0 + vec2(0.5 * delta_x, 0.2 * delta_y)),
                     close_path(),
                 ],
@@ -91,18 +91,18 @@ impl RenderJob {
             )),
             'v' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(-0.5 * delta_x, -0.2 * delta_y)),
-                    line_to(p0 + vec2(0.0, 0.2 * delta_y)),
-                    line_to(p0 + vec2(0.5 * delta_x, -0.2 * delta_y)),
+                    move_to(p0 + vec2(-0.5 * delta_x, 0.0)),
+                    line_to(p0 + vec2(0.0, 1.0 * delta_y)),
+                    line_to(p0 + vec2(0.5 * delta_x, 0.0)),
                     close_path(),
                 ],
                 &options,
             )),
             '^' => Some(generator.path_from_segments(
                 vec![
-                    move_to(p0 + vec2(-delta_x, 0.2 * delta_y)),
-                    line_to(p0 + vec2(0.0, -0.2 * delta_y)),
-                    line_to(p0 + vec2(delta_x, 0.2 * delta_y)),
+                    move_to(p0 + vec2(-0.5 * delta_x, 0.0)),
+                    line_to(p0 + vec2(0.0, -1.0 * delta_y)),
+                    line_to(p0 + vec2(0.5 * delta_x, 0.0)),
                     close_path(),
                 ],
                 &options,

@@ -114,7 +114,7 @@ enum Class {
 
 fn classify(ch: char) -> Option<Class> {
     match ch {
-        '+' | 'o' | '<' | '>' | '^' | 'v' => Some(Class::Term),
+        '+' | '<' | '>' | '^' | 'v' => Some(Class::Term),
         '-' => Some(Class::HorizEdge),
         '|' => Some(Class::VertEdge),
         _ => None,
@@ -259,7 +259,7 @@ where
             }
         }
     }
-    lines.retain(|ls| ls.len() > 1);
+    lines.retain(|ls| ls.len() >= 1);
     lines
 }
 
