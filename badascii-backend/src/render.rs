@@ -1,4 +1,3 @@
-use rand::{RngCore, SeedableRng, rngs::StdRng};
 use roughr::{PathSegment, core::Drawable};
 
 use crate::{analyze::get_wires, tc::TextCoordinate, text_buffer::TextBuffer};

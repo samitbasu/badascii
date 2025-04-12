@@ -1,5 +1,3 @@
-use std::collections::{HashMap, HashSet};
-
 use crate::{tc::TextCoordinate, text_buffer::TextBuffer};
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -107,16 +105,22 @@ enum State {
 #[derive(PartialEq, Debug)]
 enum Class {
     Term,
-    HorizEdge,
-    VertEdge,
+    Edge,
     End,
 }
 
-fn classify(ch: char) -> Option<Class> {
+fn classify_horiz(ch: char) -> Option<Class> {
     match ch {
-        '+' | '<' | '>' | '^' | 'v' => Some(Class::Term),
-        '-' => Some(Class::HorizEdge),
-        '|' => Some(Class::VertEdge),
+        '+' | '<' | '>' => Some(Class::Term),
+        '-' => Some(Class::Edge),
+        _ => None,
+    }
+}
+
+fn classify_vert(ch: char) -> Option<Class> {
+    match ch {
+        '+' | '^' | 'v' => Some(Class::Term),
+        '|' => Some(Class::Edge),
         _ => None,
     }
 }
@@ -161,7 +165,6 @@ const EOB: (TextCoordinate, Class) = (
 
 fn line_segment_finder<N>(
     vals: impl Iterator<Item = (TextCoordinate, Class)>,
-    edge: Class,
     valid_next: N,
 ) -> Vec<LineSegment>
 where
@@ -191,13 +194,12 @@ where
                         })
                     }
                     Class::End => state = State::Blank,
-                    k if k == edge => {
+                    Class::Edge => {
                         state = State::Tracking(LineSegment {
                             start: track.start,
                             end: pos,
                         });
                     }
-                    _ => state = State::Blank,
                 }
             }
             (State::Tracking(_track), pos, Class::Term) => {
@@ -220,8 +222,7 @@ where
 fn get_vertical_line_segments(tb: &TextBuffer) -> Vec<LineSegment> {
     line_segment_finder(
         tb.iter_vert()
-            .filter_map(|(pos, ch)| classify(ch).map(|k| (pos, k))),
-        Class::VertEdge,
+            .filter_map(|(pos, ch)| classify_vert(ch).map(|k| (pos, k))),
         |track, candidate| track.x == candidate.x && track.y + 1 == candidate.y,
     )
 }
@@ -229,8 +230,7 @@ fn get_vertical_line_segments(tb: &TextBuffer) -> Vec<LineSegment> {
 fn get_horizontal_line_segments(tb: &TextBuffer) -> Vec<LineSegment> {
     line_segment_finder(
         tb.iter()
-            .filter_map(|(pos, ch)| classify(ch).map(|k| (pos, k))),
-        Class::HorizEdge,
+            .filter_map(|(pos, ch)| classify_horiz(ch).map(|k| (pos, k))),
         |track, candidate| track.y == candidate.y && track.x + 1 == candidate.x,
     )
 }

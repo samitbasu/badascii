@@ -14,54 +14,12 @@ use badascii_backend::{
 use badascii::{action::Action, roughr_egui::stroke_opset};
 
 const TEXT_SCALE_FACTOR: f32 = 1.5;
-/**
- *
- *
- * Line detection
- *
- * Term, edge+, Term
- *
- * Where Term = {+, <, >, o}
- *
- *
- *
- *      .----
- *      |
- *   ---| i.data
- *      |
- *   ---| i.prev
- *      |
- *   -->| next
- *      |
- *      .____
- *
- * For each pin, we need
- *   - name                 } - these come from the struct?
- *   - direction (in/out)   }
- *   - interface (optional)   - encoded in the name?
- *   - side (l/r)          
- *   - offset from center (+/-)
- *
- * For the overall block we also need
- *   - padx (padding between the l/r labels)
- *   - pady (padding between the top and bottom labels)
- *
- * Simplest solution
- *   - Add a pin tool (or tools?  Maybe an input tool and an output tool)
- *   - Select a point on a rectangle boundary (l or right)
- *   - Enter the name of the pin
- *
- *  When pasting, extract pins from the symbol?
- */
 use eframe::egui;
 use egui::{
-    Align2, Button, Checkbox, Color32, ComboBox, CursorIcon, DragValue, Event, FontId, Key,
-    Modifiers, Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
-    util::hash, vec2,
+    Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
+    Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke, util::hash, vec2,
 };
-use egui_dock::{DockArea, DockState, Style, TabViewer};
-use rand::{RngCore, SeedableRng, rngs::StdRng};
-use roughr::generator;
+use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -131,12 +89,6 @@ enum Tab {
     Preview,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum CopyMode {
-    Ascii,
-    Svg,
-}
-
 struct MyApp {
     num_rows: u32,
     num_cols: u32,
@@ -154,7 +106,6 @@ struct MyApp {
     drag_delta: Option<Vec2>,
     rough_mode: bool,
     reset_zoom: bool,
-    copy_mode: CopyMode,
 }
 
 const INITIAL_TEXT: &str = include_str!("startup_screen.txt");
@@ -164,7 +115,10 @@ impl Default for MyApp {
         let num_rows = 40;
         let num_cols = 100;
         let mut text = TextBuffer::new(num_rows, num_cols);
-        text.paste(INITIAL_TEXT, TextCoordinate { x: 20, y: 5 });
+        text.paste(INITIAL_TEXT, TextCoordinate { x: 0, y: 0 });
+        let mut state = DockState::new(vec![Tab::Ascii]);
+        let surface = state.main_surface_mut();
+        surface.split_right(NodeIndex::root(), 0.7, vec![Tab::Preview]);
         Self {
             snapshots: VecDeque::with_capacity(100),
             futures: Vec::new(),
@@ -177,12 +131,11 @@ impl Default for MyApp {
             hover_pos: None,
             resize: None,
             prev_action: None,
-            dock_state: DockState::new(vec![Tab::Ascii, Tab::Preview]),
+            dock_state: state,
             scene_rect: Rect::NAN,
             drag_delta: None,
             rough_mode: true,
             reset_zoom: false,
-            copy_mode: CopyMode::Svg,
         }
     }
 }
@@ -520,36 +473,36 @@ impl MyApp {
             self.snapshot();
         }
     }
-    fn control_panel(&mut self, ui: &mut Ui) {
-        if ui.button("⚙").clicked() {
-            self.resize = Some(Resize {
-                num_cols: self.num_cols,
-                num_rows: self.num_rows,
-            });
-        }
-        if ui
-            .add_enabled(!self.snapshots.is_empty(), Button::new("Undo"))
-            .clicked()
-        {
-            self.undo();
-        }
-        if ui
-            .add_enabled(!self.futures.is_empty(), Button::new("Redo"))
-            .clicked()
-        {
-            self.redo();
-        }
-        ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
-        let mut copy_mode = self.copy_mode;
-        egui::ComboBox::from_label("Copy mode")
-            .selected_text(format!("{:?}", copy_mode))
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut copy_mode, CopyMode::Ascii, "ASCII");
-                ui.selectable_value(&mut copy_mode, CopyMode::Svg, "SVG");
-            });
-        self.copy_mode = copy_mode;
-        if ui.button("📋").clicked() {
-            if self.copy_mode == CopyMode::Svg {
+    fn ascii_control_panel(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            if ui.button("⚙").clicked() {
+                self.resize = Some(Resize {
+                    num_cols: self.num_cols,
+                    num_rows: self.num_rows,
+                });
+            }
+            if ui
+                .add_enabled(!self.snapshots.is_empty(), Button::new("Undo"))
+                .clicked()
+            {
+                self.undo();
+            }
+            if ui
+                .add_enabled(!self.futures.is_empty(), Button::new("Redo"))
+                .clicked()
+            {
+                self.redo();
+            }
+            if ui.button("📋").clicked() {
+                let ascii = self.text.render();
+                ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(ascii)))
+            }
+        });
+    }
+    fn preview_control_panel(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
+            if ui.button("📋").clicked() {
                 let job = RenderJob {
                     width: self.num_cols as f32 * 10.0,
                     height: self.num_rows as f32 * 15.0,
@@ -562,11 +515,8 @@ impl MyApp {
                 };
                 let svg = badascii_backend::svg::render(&job);
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
-            } else {
-                let ascii = self.text.render();
-                ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(ascii)))
             }
-        }
+        });
     }
     fn resize_panel(&mut self, ui: &mut Ui) {
         if let Some(mut resize) = self.resize.take() {
@@ -667,12 +617,18 @@ impl MyApp {
     }
     fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter) {
         let top_left = canvas.left_top();
+        let mut text = self.text.clone();
+        if let Tool::Selected(_rect) = &self.tool {
+            for (pos, c) in self.selected_text.iter() {
+                text.set_text(&pos, Some(c))
+            }
+        }
         let job = RenderJob {
             width: canvas.width(),
             height: canvas.height(),
             num_cols: self.num_cols,
             num_rows: self.num_rows,
-            text: self.text.clone(),
+            text,
             options: self.roughr_options(),
             x0: top_left.x,
             y0: top_left.y,
@@ -888,11 +844,13 @@ impl TabViewer for MyApp {
         self.reset_zoom = false;
         match tab {
             Tab::Ascii => {
+                self.ascii_control_panel(ui);
                 scene.show(ui, &mut scene_rect, |ui| {
                     self.draw_ascii_widget(ui);
                 });
             }
             Tab::Preview => {
+                self.preview_control_panel(ui);
                 scene.show(ui, &mut scene_rect, |ui| {
                     self.draw_preview_widget(ui);
                 });
@@ -912,13 +870,11 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
-                ui.horizontal(|ui| {
-                    self.control_panel(ui);
-                });
                 self.resize_panel(ui);
                 let mut dockstate = self.dock_state.clone();
                 DockArea::new(&mut dockstate)
                     .style(Style::from_egui(ui.style().as_ref()))
+                    .show_leaf_collapse_buttons(false)
                     .show_inside(ui, self);
                 self.dock_state = dockstate;
                 if let Some(txt) = std::mem::take(&mut self.copy_buffer) {

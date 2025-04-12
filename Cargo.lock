@@ -515,7 +515,6 @@ name = "badascii-backend"
 version = "0.1.0"
 dependencies = [
  "expect-test",
- "rand",
  "roughr",
  "svg",
 ]
