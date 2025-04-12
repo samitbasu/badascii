@@ -28,7 +28,7 @@ pub fn close_path() -> PathSegment {
     PathSegment::ClosePath { abs: true }
 }
 
-pub fn stroke_opset(ops: Drawable<f32>, painter: &Painter) {
+pub fn stroke_opset(ops: Drawable<f32>, painter: &Painter, color: Color32) {
     for op_set in ops.sets {
         if op_set.op_set_type != OpSetType::Path {
             continue;
@@ -41,7 +41,7 @@ pub fn stroke_opset(ops: Drawable<f32>, painter: &Painter) {
                 }
                 OpType::LineTo => {
                     let new_pos = pos2(op.data[0], op.data[1]);
-                    painter.line_segment([pos, new_pos], (1.0, Color32::LIGHT_GREEN));
+                    painter.line_segment([pos, new_pos], (1.0, color));
                     pos = new_pos;
                 }
                 OpType::BCurveTo => {
@@ -52,7 +52,7 @@ pub fn stroke_opset(ops: Drawable<f32>, painter: &Painter) {
                         points: [pos, cp1, cp2, end],
                         closed: false,
                         fill: Color32::TRANSPARENT,
-                        stroke: PathStroke::new(1.0, Color32::LIGHT_GREEN),
+                        stroke: PathStroke::new(1.0, color),
                     }));
                     pos = end;
                 }

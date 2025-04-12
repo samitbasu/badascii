@@ -17,7 +17,8 @@ const TEXT_SCALE_FACTOR: f32 = 1.5;
 use eframe::egui;
 use egui::{
     Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
-    Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke, util::hash, vec2,
+    Painter, Pos2, Rect, Response, Scene, Sense, TextStyle, Ui, Vec2, epaint::PathStroke,
+    global_theme_preference_buttons, global_theme_preference_switch, util::hash, vec2,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 
@@ -475,6 +476,7 @@ impl MyApp {
     }
     fn ascii_control_panel(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
+            global_theme_preference_switch(ui);
             if ui.button("⚙").clicked() {
                 self.resize = Some(Resize {
                     num_cols: self.num_cols,
@@ -501,6 +503,7 @@ impl MyApp {
     }
     fn preview_control_panel(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
+            global_theme_preference_switch(ui);
             ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
             if ui.button("📋").clicked() {
                 let job = RenderJob {
@@ -513,7 +516,8 @@ impl MyApp {
                     x0: 0.0,
                     y0: 0.0,
                 };
-                let svg = badascii_backend::svg::render(&job);
+                let text_color = ui.visuals().strong_text_color().to_hex();
+                let svg = badascii_backend::svg::render(&job, &text_color);
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
             }
         });
@@ -564,7 +568,7 @@ impl MyApp {
             }
         };
     }
-    fn draw_grid(&mut self, canvas: &Rect, painter: &Painter) {
+    fn draw_grid(&mut self, canvas: &Rect, painter: &Painter, grid_color: Color32) {
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
         let top_left = canvas.left_top();
@@ -572,22 +576,16 @@ impl MyApp {
             let col_x = column as f32 * delta_x;
             let p0 = top_left + vec2(col_x, 0.0);
             let p1 = top_left + vec2(col_x, canvas.height());
-            painter.line(
-                vec![p0, p1],
-                PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
-            );
+            painter.line(vec![p0, p1], PathStroke::new(1.0, grid_color));
         }
         for row in 0..=self.num_rows {
             let row_y = row as f32 * delta_y;
             let p0 = top_left + vec2(0.0, row_y);
             let p1 = top_left + vec2(canvas.width(), row_y);
-            painter.line(
-                vec![p0, p1],
-                PathStroke::new(1.0, Color32::from_gray(65).linear_multiply(0.5)),
-            );
+            painter.line(vec![p0, p1], PathStroke::new(1.0, grid_color));
         }
     }
-    fn draw_text_buffer(&mut self, canvas: &Rect, painter: &Painter) {
+    fn draw_text_buffer(&mut self, canvas: &Rect, painter: &Painter, text_color: Color32) {
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
         let text_size = delta_x.min(delta_y) * TEXT_SCALE_FACTOR;
@@ -599,7 +597,7 @@ impl MyApp {
                 Align2::CENTER_CENTER,
                 ch,
                 monospace.clone(),
-                Color32::WHITE.linear_multiply(0.7),
+                text_color,
             );
         }
     }
@@ -615,7 +613,7 @@ impl MyApp {
             }
         }
     }
-    fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter) {
+    fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter, color: Color32) {
         let top_left = canvas.left_top();
         let mut text = self.text.clone();
         if let Tool::Selected(_rect) = &self.tool {
@@ -635,7 +633,7 @@ impl MyApp {
         };
         let (tb, ops) = job.invoke();
         for op in ops {
-            stroke_opset(op, painter);
+            stroke_opset(op, painter, color);
         }
         let delta_x = canvas.width() / self.num_cols as f32;
         let delta_y = canvas.height() / self.num_rows as f32;
@@ -643,13 +641,7 @@ impl MyApp {
         let monospace = FontId::monospace(text_size);
         for (coord, ch) in tb.iter() {
             let center = self.map_text_coordinate_to_cell_center(canvas, &coord);
-            painter.text(
-                center,
-                Align2::CENTER_CENTER,
-                ch,
-                monospace.clone(),
-                Color32::LIGHT_GREEN,
-            );
+            painter.text(center, Align2::CENTER_CENTER, ch, monospace.clone(), color);
         }
     }
     fn show_hover(&mut self, canvas: &Rect, pos: Pos2, painter: &Painter) {
@@ -773,12 +765,14 @@ impl MyApp {
         }
     }
     fn draw_ascii_widget(&mut self, ui: &mut Ui) {
-        egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+        egui::Frame::canvas(ui.style()).show(ui, |ui| {
             let desired_size = ui.available_size();
             let (resp, painter) = ui.allocate_painter(desired_size, Sense::click_and_drag());
             let canvas = resp.rect;
-            self.draw_grid(&canvas, &painter);
-            self.draw_text_buffer(&canvas, &painter);
+            let text_color = ui.style().visuals.strong_text_color();
+            let grid_color = ui.style().visuals.code_bg_color;
+            self.draw_grid(&canvas, &painter, grid_color);
+            self.draw_text_buffer(&canvas, &painter, text_color);
             if let Some(pos) = resp.hover_pos() {
                 self.show_hover(&canvas, pos, &painter);
                 match &self.tool {
@@ -807,11 +801,12 @@ impl MyApp {
         });
     }
     fn draw_preview_widget(&mut self, ui: &mut Ui) {
-        egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
+        egui::Frame::canvas(ui.style()).show(ui, |ui| {
             let desired_size = ui.available_size();
             let (resp, painter) = ui.allocate_painter(desired_size, Sense::click_and_drag());
             let canvas = resp.rect;
-            self.draw_rendered_schematic(&canvas, &painter);
+            let text_color = ui.style().visuals.strong_text_color();
+            self.draw_rendered_schematic(&canvas, &painter, text_color);
             if resp.dragged_by(egui::PointerButton::Secondary) {
                 self.drag_delta = Some(resp.drag_delta());
             }

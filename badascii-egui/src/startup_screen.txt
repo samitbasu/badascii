@@ -24,16 +24,16 @@
 |                    +       +-> and press+----->    to here  +         like a right arrow      |
 |                    v           right arrow                  v         using the '>' key       |
 |                                                                                               |
-|      If you change direction, BadAscii will put corners in for you.                           |
-|                                                                                               |
-|      Try it here:                                                                             |
-|                                                                                               |
+|      If you change direction, BadAscii will put corners in for you.          +---+            |
+|                                                                              | OO|            |
+|      Try it here:                                                            +---+            |
+|                                                                             BadAscii          |
 |      To delete something, select it and press the backspace  <--+                             |
 |                                                                                               |
 |      You can copy directly from the canvas by selecting a rectangle and then using your       |
 |      regular copy key.  You can also paste into the canvas with your regular paste key.       |
 |                                                                                               |
-|      Finally, you can undo and redo so don't worry!                                           |
+|      Finally, you can undo and redo so don't worry!        +---+To Preview+-->                |
 |                                                                                               |
 |      If you want a fancy graphic, check out the preview tab!  You can get an SVG to embed     |
 |      in your fancy docs or webpage.  You can also change the canvas size with the Gear button.|
