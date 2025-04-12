@@ -157,34 +157,7 @@ struct MyApp {
     copy_mode: CopyMode,
 }
 
-const INITIAL_TEXT: &str = "
-                      +----------+    +-------+  +---------+
-                      | Endpoint |    |Publish|  |Subscribe|
-                      +----------+    +-+-----+  +-+-------+
-                         +    ^  message|          |     ^
-            +--------+   |    |         | subscribe|     |message
-        +--++ CLIENT |+--+----+---------+----------+-----+----+
-        |   +--------+   |    |         |          |     |    |
-        |                v    +         v          v     |    |
-        |         +---------------------------------+    |    |
-        |         |          HostClient             |    |    |
-        |         +---+-------------------------+---+    |    |
-        |             |             ^           |        |    |
-        |             |             |           |        |    |
-        |             |             |           v        |    |
-        |             |      +------+-------+------------+-+  |
-        |             +----->| Pending Resp | Subscription |  |
-        |                    +--------------+--------------+  |
-        |                           ^               ^         |
-        |                           |               |         |
-        |                           +-------+-------+         |
-        |                                   |                 |
-        |                       +-----------+-----------+     |
-        |                       |  Task: in_worker   ^  |     |
-        |                       |                    |  |     |
-        |                       +--------------------|--|     |
-        |                       |  Trait: WireRx     +  |     |
-        +-----------------------+-----------------------+-----+";
+const INITIAL_TEXT: &str = include_str!("startup_screen.txt");
 
 impl Default for MyApp {
     fn default() -> Self {
@@ -395,8 +368,8 @@ impl MyApp {
                 }));
             }
             Action::RightControlArrow => {
-                let char = if (self.prev_action == Some(Action::DownControlArrow))
-                    || (self.prev_action == Some(Action::UpControlArrow))
+                let char = if (self.prev_action != Some(Action::RightControlArrow))
+                    && (self.prev_action != Some(Action::LeftControlArrow))
                 {
                     '+'
                 } else {
@@ -415,8 +388,8 @@ impl MyApp {
                 }));
             }
             Action::LeftControlArrow => {
-                let char = if (self.prev_action == Some(Action::DownControlArrow))
-                    || (self.prev_action == Some(Action::UpControlArrow))
+                let char = if (self.prev_action != Some(Action::RightControlArrow))
+                    && (self.prev_action != Some(Action::LeftControlArrow))
                 {
                     '+'
                 } else {
@@ -435,8 +408,8 @@ impl MyApp {
                 }));
             }
             Action::UpControlArrow => {
-                let char = if (self.prev_action == Some(Action::LeftControlArrow))
-                    || (self.prev_action == Some(Action::RightControlArrow))
+                let char = if (self.prev_action != Some(Action::UpControlArrow))
+                    && (self.prev_action != Some(Action::DownControlArrow))
                 {
                     '+'
                 } else {
@@ -455,8 +428,8 @@ impl MyApp {
                 }));
             }
             Action::DownControlArrow => {
-                let char = if (self.prev_action == Some(Action::LeftControlArrow))
-                    || (self.prev_action == Some(Action::RightControlArrow))
+                let char = if (self.prev_action != Some(Action::DownControlArrow))
+                    && (self.prev_action != Some(Action::UpControlArrow))
                 {
                     '+'
                 } else {

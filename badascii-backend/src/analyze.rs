@@ -121,11 +121,6 @@ fn classify(ch: char) -> Option<Class> {
     }
 }
 
-#[derive(Debug, Hash)]
-pub struct Wire {
-    pub segments: Vec<LineSegment>,
-}
-
 fn merge_line_segment(segments: &mut Vec<LineSegment>, segment: LineSegment) {
     for candidate in segments.iter_mut() {
         if candidate.is_colinear(&segment) {
@@ -148,53 +143,12 @@ fn merge_colinear(mut segments: Vec<LineSegment>) -> Vec<LineSegment> {
     ret
 }
 
-pub fn get_wires(tb: &TextBuffer) -> Vec<Wire> {
+pub fn get_wires(tb: &TextBuffer) -> Vec<LineSegment> {
     let mut segments = get_horizontal_line_segments(tb);
     segments.extend(get_vertical_line_segments(tb));
-    let mut corner_map = HashMap::<TextCoordinate, HashSet<LineSegment>>::default();
-    for ls in segments.clone() {
-        corner_map.entry(ls.start).or_default().insert(ls);
-        corner_map.entry(ls.end).or_default().insert(ls);
-    }
-    let segments = merge_colinear(segments);
-    let mut segments: HashSet<LineSegment> = segments.into_iter().collect();
-    let mut wireset = vec![];
-    loop {
-        let mut wire = vec![];
-        let Some(segment) = segments.iter().next().cloned() else {
-            break;
-        };
-        segments.remove(&segment);
-        corner_map
-            .get_mut(&segment.start)
-            .map(|t| t.remove(&segment));
-        corner_map.get_mut(&segment.end).map(|t| t.remove(&segment));
-        wire.push(segment);
-        let mut end_points: HashSet<TextCoordinate> =
-            [segment.start, segment.end].into_iter().collect();
-        loop {
-            let Some(attached) = end_points
-                .iter()
-                .find_map(|x| corner_map.get(x).and_then(|p| p.iter().next().cloned()))
-            else {
-                break;
-            };
-            end_points.insert(attached.start);
-            end_points.insert(attached.end);
-            wire.push(attached);
-            segments.remove(&attached);
-            corner_map
-                .get_mut(&attached.start)
-                .map(|t| t.remove(&attached));
-            corner_map
-                .get_mut(&attached.end)
-                .map(|t| t.remove(&attached));
-        }
-        wire.sort_by_key(|a| a.id());
-        wireset.push(Wire { segments: wire });
-    }
-    wireset.sort_by_key(|x| x.segments[0].id());
-    wireset
+    let mut segments = merge_colinear(segments);
+    segments.sort_by_key(|l| l.id());
+    segments
 }
 
 const EOB: (TextCoordinate, Class) = (

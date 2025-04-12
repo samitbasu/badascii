@@ -1,0 +1,9 @@
+Welcome to BadAscii!  A simple tool to make block diagrams in ASCII for documentation.
+
+The syntax is pretty simple.  Every line starts or ends with one of these characters:
+
+   '<'  Left arrow     Some examples:     +--->    +>    <->
+   '>'  Right arrow                       <---+    <+    <>
+   '^'  Up arrow               
+   'v'  Down arrow
+   '+'  Endpoint
