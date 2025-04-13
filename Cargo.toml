@@ -1,4 +1,0 @@
-[workspace]
-resolver = "2"
-
-members = ["badascii-egui", "badascii", "badascii-doc", "badascii-cli"]
