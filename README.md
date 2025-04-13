@@ -1,5 +1,24 @@
 # BadAscii 
 
+What is `badascii`?  It's a diagram that is drawn with simple
+ASCII characters that can be used to represent simple block
+diagrams.  For example:
+
+```
+       +-------------+        +-------------+
+       | Thing 1     |        | Thing 2     |
+       |             |        |             |
+  +--->|ins      outs+------->|ins      outs+----+
+  |    |             |        |             |    |
+  |    |             |        |             |    |
+  |    +-------------+        +-------------+    |
+  |                                              |
+  +----------------------------------------------+
+```
+and convert them into SVG images like this:
+
+![SVG of diagram](https://github.com/samitbasu/badascii/blob/main/badascii/example.svg)
+
 A set of Rust Crates that implement the BadAscii system for
 capturing block diagrams in comments and plain text files
 and then rendering them into SVGs.  This repository contains
