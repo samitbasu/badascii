@@ -1,0 +1,40 @@
++-----------------------------------------------------------------------------------------------+
+|  Welcome to BadAscii!  A simple tool to make block diagrams in ASCII for documentation.       |
+|  The syntax is pretty simple.  Every line starts or ends with one of these characters:        |
+|                                                                                               |
+|   +--+Line Ends+------+  +---+Line Parts++--+     +--+Examples+-------------------------+     |
+|   | <    Left arrow   |  |                  |     | +>    <->   ^      ^   ^     +--->  |     |
+|   |   >  Right arrow  |  |  |   Vertical    |     |             |      |   +            |     |
+|   | ^    Up arrow     |  |                  |     | <+ +  <>    +  +   v         <---+  |     |
+|   |   v  Down arrow   |  |  -   Horizontal  |     |    |           |       ^            |     |
+|   |  +   Endpoint     |  |                  |     |   <+>          v       +--->        |     |
+|   +-------------------+  +------------------+     +-------------------------------------+     |
+| You can select things with the left mouse button by dragging a rectangle,    +----------------+
+| and then moving it about on the canvas. You can also zoom in and pan about.  |zoom: CTRL+Wheel|
+|                                                                              |                |
+|            +---------+                      To Here!                         |pan: Right Btn  |
+|   Try it!  | Move Me |     +-------->                       You can use Undo |     Drag       |
+|            +---------+                                      &  move it back! +----------------+
+|                                                                                               |
+|      You can navigate on the canvas with the arrow keys.                                      |
+|                                                                                               |
+|      If you hold down the `shift` key, then the arrow keys will draw a line for you.          |
+|                                                                                               |
+|      Try it!   Click here      Hold shift        To draw a line     Then add an endpoint      |
+|                    +       +-> and press+----->    to here  +         like a right arrow      |
+|                    v           right arrow                  v         using the '>' key       |
+|                                                                                               |
+|      If you change direction, BadAscii will put corners in for you.          +---+            |
+|                                                                              | OO|            |
+|      Try it here:                                                            +---+            |
+|                                                                             BadAscii          |
+|      To delete something, select it and press the backspace  <--+                             |
+|                                                                                               |
+|      You can copy directly from the canvas by selecting a rectangle and then using your       |
+|      regular copy key.  You can also paste into the canvas with your regular paste key.       |
+|                                                                                               |
+|      Finally, you can undo and redo so don't worry!        +---+To Preview+-->                |
+|                                                                                               |
+|      If you want a fancy graphic, check out the preview tab!  You can get an SVG to embed     |
+|      in your fancy docs or webpage.  You can also change the canvas size with the Gear button.|
++-----------------------------------------------------------------------------------------------+
