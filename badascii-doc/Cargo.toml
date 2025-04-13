@@ -7,7 +7,7 @@ edition = "2024"
 proc-macro = true
 
 [dependencies]
-badascii-backend = { version = "0.1.0", path = "../badascii-backend" }
+badascii = { version = "0.1.0", path = "../badascii" }
 proc-macro2 = "1.0.94"
 quote = "1.0.40"
 syn = "2.0.100"

@@ -1,16 +1,59 @@
-use roughr::{PathSegment, core::Drawable};
+use roughr::{
+    PathSegment,
+    core::{Drawable, Options},
+};
 
 use crate::{analyze::get_wires, tc::TextCoordinate, text_buffer::TextBuffer};
 
+/// Describes the parameters of the render from a text buffer
+/// to the target (usually SVG).  You can control the `width`
+/// and `height` of the virtual canvas, as well as the `x0`, `y0`
+/// for the origin of the rendering on that canvas.
 pub struct RenderJob {
     pub width: f32,
     pub height: f32,
-    pub num_cols: u32,
-    pub num_rows: u32,
     pub text: TextBuffer,
     pub options: roughr::core::Options,
     pub x0: f32,
     pub y0: f32,
+}
+
+impl RenderJob {
+    /// Create a rendering job that uses rough lines for
+    /// the drawing to give it a more informal look.
+    pub fn rough(text: TextBuffer) -> Self {
+        let width = (text.size().num_cols * 10) as f32;
+        let height = (text.size().num_rows * 15) as f32;
+        let options = Options::default();
+        Self {
+            width,
+            height,
+            text,
+            options,
+            x0: 0.0,
+            y0: 0.0,
+        }
+    }
+    /// Put on that suit and tie!  Time for a formal look.
+    /// Only clean straight lines here.
+    pub fn formal(text: TextBuffer) -> Self {
+        let width = (text.size().num_cols * 10) as f32;
+        let height = (text.size().num_rows * 15) as f32;
+        let options = Options {
+            disable_multi_stroke: Some(true),
+            max_randomness_offset: Some(0.0),
+            roughness: Some(0.0),
+            ..Options::default()
+        };
+        Self {
+            width,
+            height,
+            text,
+            options,
+            x0: 0.0,
+            y0: 0.0,
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -56,8 +99,8 @@ fn close_path() -> PathSegment {
 
 impl RenderJob {
     fn render_wire_end(&self, ch: char, pos: TextCoordinate) -> Vec<PathSegment> {
-        let delta_x = self.width / self.num_cols as f32;
-        let delta_y = self.height / self.num_rows as f32;
+        let delta_x = self.width / self.text.size().num_cols as f32;
+        let delta_y = self.height / self.text.size().num_rows as f32;
         let pos_map = |pos: TextCoordinate| {
             vec2(self.x0, self.y0)
                 + vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y)
@@ -97,8 +140,8 @@ impl RenderJob {
     }
 
     pub fn invoke(&self) -> (TextBuffer, Vec<Drawable<f32>>) {
-        let delta_x = self.width / self.num_cols as f32;
-        let delta_y = self.height / self.num_rows as f32;
+        let delta_x = self.width / self.text.size().num_cols as f32;
+        let delta_y = self.height / self.text.size().num_rows as f32;
         let mut labels = self.text.clone();
         let pos_map = |pos: TextCoordinate| {
             vec2(self.x0, self.y0)

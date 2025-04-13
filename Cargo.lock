@@ -499,21 +499,6 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 name = "badascii"
 version = "0.1.0"
 dependencies = [
- "badascii-backend",
- "eframe",
- "egui",
- "egui_dock",
- "egui_extras",
- "env_logger",
- "expect-test",
- "rand",
- "roughr",
-]
-
-[[package]]
-name = "badascii-backend"
-version = "0.1.0"
-dependencies = [
  "expect-test",
  "roughr",
  "svg",
@@ -523,7 +508,7 @@ dependencies = [
 name = "badascii-cli"
 version = "0.1.0"
 dependencies = [
- "badascii-backend",
+ "badascii",
  "badascii-doc",
  "clap",
  "clap-stdin",
@@ -533,11 +518,26 @@ dependencies = [
 name = "badascii-doc"
 version = "0.1.0"
 dependencies = [
- "badascii-backend",
+ "badascii",
  "expect-test",
  "proc-macro2",
  "quote",
  "syn 2.0.100",
+]
+
+[[package]]
+name = "badascii-egui"
+version = "0.1.0"
+dependencies = [
+ "badascii",
+ "eframe",
+ "egui",
+ "egui_dock",
+ "egui_extras",
+ "env_logger",
+ "expect-test",
+ "rand",
+ "roughr",
 ]
 
 [[package]]

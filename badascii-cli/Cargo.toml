@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-badascii-backend = { version = "0.1.0", path = "../badascii-backend" }
+badascii = { version = "0.1.0", path = "../badascii" }
 badascii-doc = { version = "0.1.0", path = "../badascii-doc" }
 clap = { version = "4.5.36", features = ["derive"] }
 clap-stdin = { version = "0.6.0" }

@@ -6,12 +6,12 @@
 
 use std::collections::VecDeque;
 
-use badascii_backend::{
+use badascii::{
     rect::Rectangle, render::RenderJob, tc::TextCoordinate, text_buffer::Size,
     text_buffer::TextBuffer,
 };
 
-use badascii::{action::Action, roughr_egui::stroke_opset};
+use badascii_egui::{action::Action, roughr_egui::stroke_opset};
 
 const TEXT_SCALE_FACTOR: f32 = 1.5;
 use eframe::egui;
@@ -517,7 +517,7 @@ impl MyApp {
                     y0: 0.0,
                 };
                 let text_color = ui.visuals().strong_text_color().to_hex();
-                let svg = badascii_backend::svg::render(&job, &text_color);
+                let svg = badascii::svg::render(&job, &text_color);
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
             }
         });

@@ -1,4 +1,4 @@
-use badascii_backend::{Options, render::RenderJob, text_buffer::TextBuffer};
+use badascii::{Options, render::RenderJob, text_buffer::TextBuffer};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{LitStr, parse_macro_input};
@@ -35,7 +35,7 @@ pub fn badascii_smooth(input: TokenStream) -> TokenStream {
         x0: 0.0,
         y0: 0.0,
     };
-    let svg = badascii_backend::svg::render(&job, "currentColor");
+    let svg = badascii::svg::render(&job, "currentColor");
     let svg = format!("<p>{svg}</p>");
     quote!(#svg).into()
 }
@@ -55,7 +55,7 @@ pub fn badascii(input: TokenStream) -> TokenStream {
         x0: 0.0,
         y0: 0.0,
     };
-    let svg = badascii_backend::svg::render(&job, "currentColor");
+    let svg = badascii::svg::render(&job, "currentColor");
     let svg = format!("<p>{svg}</p>");
     quote!(#svg).into()
 }

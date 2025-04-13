@@ -36,8 +36,8 @@ pub fn stroke_opset(ops: Drawable<f32>, mut painter: svg::Document, color: &str)
 
 pub fn render(job: &RenderJob, color: &str) -> String {
     let mut context = svg::Document::new().set("viewBox", (0.0, 0.0, job.width, job.height));
-    let delta_x = job.width / job.num_cols as f32;
-    let delta_y = job.height / job.num_rows as f32;
+    let delta_x = job.width / job.text.size().num_cols as f32;
+    let delta_y = job.height / job.text.size().num_rows as f32;
     let (labels, drawables) = job.invoke();
     let pos_map = |pos: TextCoordinate| {
         vec2(pos.x as f32 * delta_x, pos.y as f32 * delta_y) + vec2(0.5 * delta_x, 0.5 * delta_y)
@@ -89,8 +89,6 @@ v    |                     |   |
             &RenderJob {
                 width: 600.0,
                 height: 450.0,
-                num_cols: 60,
-                num_rows: 30,
                 text: tb,
                 options: roughr::core::Options::default(),
                 x0: 0.0,
@@ -143,8 +141,6 @@ v    |                     |   |
             &RenderJob {
                 width: 1000.0,
                 height: 40.0 * 15.0,
-                num_cols: 100,
-                num_rows: 40,
                 text: tb,
                 options: roughr::core::Options::default(),
                 x0: 0.0,
