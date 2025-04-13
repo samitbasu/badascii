@@ -16,7 +16,7 @@ ASCII characters. Like this:
 ```
 and convert them into SVG images like this:
 
-[SVG of diagram](https://github.com/samitbasu/badascii/blob/main/badascii/example.svg)
+![SVG of diagram](https://github.com/samitbasu/badascii/blob/main/badascii/example.svg)
 
 To use this as a library, the API is pretty simple:
 
