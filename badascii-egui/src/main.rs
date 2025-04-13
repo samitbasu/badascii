@@ -7,7 +7,7 @@
 use std::collections::VecDeque;
 
 use badascii_backend::{
-    rect::Rectangle, render::RenderJob, tc::TextCoordinate, text_buffer::Resize,
+    rect::Rectangle, render::RenderJob, tc::TextCoordinate, text_buffer::Size,
     text_buffer::TextBuffer,
 };
 
@@ -17,8 +17,8 @@ const TEXT_SCALE_FACTOR: f32 = 1.5;
 use eframe::egui;
 use egui::{
     Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
-    Painter, Pos2, Rect, Response, Scene, Sense, TextStyle, Ui, Vec2, epaint::PathStroke,
-    global_theme_preference_buttons, global_theme_preference_switch, util::hash, vec2,
+    Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
+    global_theme_preference_switch, util::hash, vec2,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 
@@ -100,7 +100,7 @@ struct MyApp {
     text: TextBuffer,
     copy_buffer: Option<String>,
     hover_pos: Option<TextCoordinate>,
-    resize: Option<Resize>,
+    resize: Option<Size>,
     prev_action: Option<Action>,
     dock_state: DockState<Tab>,
     scene_rect: Rect,
@@ -478,7 +478,7 @@ impl MyApp {
         ui.horizontal(|ui| {
             global_theme_preference_switch(ui);
             if ui.button("⚙").clicked() {
-                self.resize = Some(Resize {
+                self.resize = Some(Size {
                     num_cols: self.num_cols,
                     num_rows: self.num_rows,
                 });

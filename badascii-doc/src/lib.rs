@@ -1,11 +1,9 @@
-use badascii_backend::{Options, render::RenderJob, tc::TextCoordinate, text_buffer::TextBuffer};
+use badascii_backend::{Options, render::RenderJob, text_buffer::TextBuffer};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{LitStr, parse_macro_input};
 
-#[proc_macro]
-pub fn my_macro(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as LitStr);
+fn get_text_buffer(input: LitStr) -> TextBuffer {
     let input = input.token().to_string();
     let input_len = input.len();
     let input = input
@@ -13,38 +11,51 @@ pub fn my_macro(input: TokenStream) -> TokenStream {
         .skip(1)
         .take(input_len - 2)
         .collect::<String>();
-    let mut text_buffer = TextBuffer::new(60, 150);
-    text_buffer.paste(&input, TextCoordinate { x: 1, y: 1 });
+    TextBuffer::with_text(&input)
+}
+
+#[proc_macro]
+pub fn badascii_smooth(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as LitStr);
+    let text_buffer = get_text_buffer(input);
+    let size = text_buffer.size();
+    let options = Options {
+        disable_multi_stroke: Some(true),
+        max_randomness_offset: Some(0.0),
+        roughness: Some(0.0),
+        ..Default::default()
+    };
     let job = RenderJob {
-        width: 1500.0,
-        height: 900.0,
-        num_cols: 150,
-        num_rows: 60,
+        width: (size.num_cols * 10) as f32,
+        height: (size.num_rows * 15) as f32,
+        num_cols: size.num_cols,
+        num_rows: size.num_rows,
+        text: text_buffer,
+        options,
+        x0: 0.0,
+        y0: 0.0,
+    };
+    let svg = badascii_backend::svg::render(&job, "currentColor");
+    let svg = format!("<p>{svg}</p>");
+    quote!(#svg).into()
+}
+
+#[proc_macro]
+pub fn badascii(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as LitStr);
+    let text_buffer = get_text_buffer(input);
+    let size = text_buffer.size();
+    let job = RenderJob {
+        width: (size.num_cols * 10) as f32,
+        height: (size.num_rows * 15) as f32,
+        num_cols: size.num_cols,
+        num_rows: size.num_rows,
         text: text_buffer,
         options: Options::default(),
         x0: 0.0,
         y0: 0.0,
     };
-    let svg = badascii_backend::svg::render(&job);
+    let svg = badascii_backend::svg::render(&job, "currentColor");
+    let svg = format!("<p>{svg}</p>");
     quote!(#svg).into()
-}
-
-#[cfg(test)]
-mod tests {
-    use syn::parse2;
-
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let input = quote! {"
-+-----+
-      |
-      |<-----o 
-      |
-+-----+
-"};
-        let svg = my_macro(input.into());
-        eprintln!("{}", svg);
-    }
 }

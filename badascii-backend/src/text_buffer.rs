@@ -1,6 +1,6 @@
 use crate::{rect::Rectangle, tc::TextCoordinate};
 
-pub struct Resize {
+pub struct Size {
     pub num_rows: u32,
     pub num_cols: u32,
 }
@@ -31,6 +31,19 @@ impl TextBuffer {
             buffer: vec![None; (cols * rows) as usize].into_boxed_slice(),
             num_rows: rows,
             num_cols: cols,
+        }
+    }
+    pub fn with_text(text: &str) -> Self {
+        let num_cols = text.split('\n').map(|x| x.len()).max().unwrap_or(80) as u32;
+        let num_rows = text.split('\n').count() as u32;
+        let mut me = Self::new(num_rows, num_cols);
+        me.paste(text, TextCoordinate { x: 0, y: 0 });
+        me
+    }
+    pub fn size(&self) -> Size {
+        Size {
+            num_cols: self.num_cols,
+            num_rows: self.num_rows,
         }
     }
     pub fn set_text(&mut self, pos: &TextCoordinate, ch: Option<char>) {
@@ -168,7 +181,7 @@ impl TextBuffer {
         buf.join("\n")
     }
 
-    pub fn resize(&self, resize: Resize) -> TextBuffer {
+    pub fn resize(&self, resize: Size) -> TextBuffer {
         let mut output = TextBuffer::new(resize.num_rows, resize.num_cols);
         for row in 0..resize.num_rows {
             for col in 0..resize.num_cols {
