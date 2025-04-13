@@ -1,81 +1,81 @@
-<svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
-<path d="M95.74456,52.844654 M95.743996,52.38013 C144.47754,55.076206,193.89938,54.565853,233.41696,52.22383 M94.915375,52.781723 C130.27632,50.576687,165.82991,51.082767,234.59538,51.872284 M324.42392,50.665623 M326.02335,53.846222 C355.44443,55.621017,385.07794,53.288116,466.17606,52.41416 M325.60617,51.55343 C355.6204,54.725006,388.6817,55.27583,465.05496,53.310745 M44.66119,97.63971 M43.265625,95.64855 C53.85902,98.89346,60.582268,96.43896,84.156395,99.23888 M44.14545,96.98554 C58.447243,97.83909,73.88076,97.29327,85.5513,97.78921 M235.96246,96.064766 M236.71315,96.26987 C256.94702,100.21655,283.42447,99.90281,314.43524,98.95294 M234.80542,98.093376 C259.56033,98.27559,284.7426,97.88706,314.81134,98.37204 M464.5898,97.30452 M466.96298,97.981514 C482.11038,97.60142,496.90677,98.58905,514.8488,96.39453 M464.29395,98.43625 C481.6406,98.333,497.75693,97.48167,515.80115,96.7629 M95.21955,53.29533 M93.82482,54.257324 C97.232956,76.06304,97.47969,97.34306,93.29181,144.4187 M95.912544,53.337383 C95.871666,80.7466,95.3075,109.4137,94.30544,142.932 M236.29182,54.12585 M235.69107,51.974155 C234.63718,80.82494,236.66202,105.625374,234.87903,141.06548 M234.94087,51.84516 C233.67558,73.94498,232.3828,96.60289,235.5351,143.36293 M93.30957,140.79294 M94.63829,141.06416 C138.21133,140.31705,180.6531,142.5876,233.31133,144.49333 M95.75447,142.01277 C131.70975,139.53265,168.0729,141.09985,235.25706,142.35681 M326.54767,50.620556 M324.78952,51.629578 C325.5645,74.16727,324.58554,94.66521,323.40445,141.44157 M325.43634,53.0892 C327.46313,84.39771,326.9899,114.23987,324.02948,142.75037 M463.4081,52.359604 M466.46817,53.40014 C464.70047,86.855446,463.25888,119.54808,463.22644,141.76189 M465.9092,53.156116 C463.34528,85.064644,463.72937,119.573784,465.5663,142.56023 M323.54922,142.66618 M326.8341,141.34375 C371.1425,146.25395,417.27255,146.01692,464.2234,143.89517 M324.71463,142.91388 C376.72733,141.78258,427.54285,141.4495,464.00964,141.56998 M46.936977,98.64867 M45.734726,96.66842 C44.327633,116.6919,45.44305,133.33289,46.137257,170.98438 M44.80832,98.30498 C44.93425,119.709305,44.21877,143.83824,44.453346,172.23712 M515.6045,95.91769 M516.8961,97.42845 C511.7149,122.21134,513.76263,148.66585,516.42426,172.17358 M514.20557,97.39304 C514.7673,126.57652,515.4331,155.55898,514.11505,172.45053 M46.963734,173.34218 M45.541912,172.29213 C145.13947,170.91965,246.94507,172.42035,514.64026,172.87767 M45.380608,172.15208 C228.4125,169.29176,411.21695,169.44365,514.99194,172.1502 M83.98638,93.0466 M84.17135,92.93094 C86.5497,94.33483,90.4823,95.58806,94.42047,97.48852 M85.4556,92.90218 C88.82242,95.094444,91.369865,96.58372,94.921906,97.090324 M96.04941,97.81759 C91.95212,98.82719,90.92057,98.71838,85.77272,102.489395 M94.77698,97.46066 C92.01697,99.05525,88.627846,100.13429,84.69876,101.85917 M84.33106,101.90846 C84.92005,99.38116,85.27687,96.546875,84.11182,92.30369 M85.28281,101.88213 C85.165825,98.64051,85.58029,96.11758,84.735725,92.6617 M315.54874,92.4857 M315.93906,93.864716 C318.995,95.094444,322.7428,95.60323,325.10828,97.98098 M315.11697,93.01754 C319.02573,94.84316,322.7847,97.12209,325.35126,97.00539 M324.60614,98.58984 C322.5134,99.789024,319.89804,99.6162,315.69125,101.69417 M324.72034,97.44577 C321.94812,98.681366,318.73346,100.49566,314.66714,101.92918 M315.4978,101.97183 C314.52567,99.78193,315.4597,97.42328,314.5224,92.50923 M314.73856,101.95828 C314.88004,100.11262,314.76443,97.89984,314.56372,92.680214" fill="none" stroke="#ffffffff" stroke-width="1"/>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="115" y="67.5">
+<svg viewBox="0 0 500 150" xmlns="http://www.w3.org/2000/svg">
+<path d="M75.74456,7.8446527 M75.743996,7.3801293 C124.47752,10.076206,173.89938,9.565853,213.41696,7.2238307 M74.915375,7.7817225 C110.27632,5.576689,145.82991,6.0827694,214.59538,6.8722835 M304.42392,5.6656218 M306.02335,8.846221 C335.44443,10.621019,365.07794,8.288117,446.17606,7.4141617 M305.60617,6.553427 C335.6204,9.725004,368.6817,10.275829,445.05496,8.310745 M24.661188,52.639706 M23.265625,50.648552 C33.85902,53.893463,40.582268,51.438957,64.156395,54.238876 M24.145452,51.985542 C38.447243,52.83909,53.880756,52.293266,65.5513,52.789204 M215.96246,51.064762 M216.71315,51.269863 C236.947,55.21655,263.42447,54.90281,294.43524,53.952946 M214.80542,53.093372 C239.56036,53.27559,264.7426,52.887066,294.81134,53.372036 M444.5898,52.304516 M446.96298,52.981518 C462.11038,52.60142,476.90677,53.58905,494.84882,51.39453 M444.29395,53.43625 C461.6406,53.333,477.75693,52.481667,495.80115,51.7629 M75.21955,8.295328 M73.82482,9.257323 C77.232956,31.063044,77.47969,52.343067,73.29181,99.41869 M75.912544,8.337383 C75.871666,35.746597,75.3075,64.4137,74.30544,97.93201 M216.29182,9.12585 M215.69107,6.9741564 C214.63718,35.824944,216.66202,60.625378,214.87903,96.065475 M214.94087,6.8451614 C213.67558,28.944977,212.3828,51.602886,215.5351,98.36293 M73.30957,95.792946 M74.63829,96.06416 C118.21134,95.31705,160.6531,97.58761,213.31133,99.493324 M75.75447,97.01277 C111.70974,94.532646,148.0729,96.099846,215.25706,97.35682 M306.54767,5.6205573 M304.78952,6.6295786 C305.5645,29.167267,304.58554,49.665207,303.40445,96.44158 M305.43634,8.089199 C307.46313,39.397713,306.9899,69.23987,304.02948,97.75037 M443.4081,7.359603 M446.46817,8.400138 C444.70047,41.85544,443.25888,74.54808,443.22644,96.76188 M445.9092,8.156117 C443.34528,40.064644,443.72937,74.573784,445.5663,97.56023 M303.54922,97.666176 M306.8341,96.34375 C351.1425,101.25397,397.27255,101.01693,444.2234,98.89518 M304.71463,97.91388 C356.72733,96.78258,407.54285,96.44949,444.00964,96.56998 M26.93698,53.648666 M25.734728,51.66842 C24.327631,71.6919,25.443047,88.332886,26.137257,125.984375 M24.808317,53.304977 C24.934252,74.709305,24.218773,98.83825,24.453344,127.23712 M495.60452,50.91769 M496.8961,52.428448 C491.7149,77.21134,493.76263,103.66585,496.42422,127.17359 M494.2056,52.393044 C494.7673,81.57652,495.4331,110.558975,494.11505,127.45054 M26.963734,128.34218 M25.541912,127.29213 C125.13948,125.91964,226.94507,127.42034,494.64026,127.87768 M25.38061,127.15208 C208.4125,124.291756,391.21695,124.44366,494.99194,127.15021 M63.986385,48.0466 M64.17135,47.93094 C66.5497,49.334835,70.4823,50.588066,74.42047,52.488514 M65.4556,47.90218 C68.82242,50.094448,71.369865,51.583717,74.921906,52.09033 M76.04941,52.817585 C71.95212,53.82718,70.92057,53.71838,65.77272,57.489395 M74.77698,52.460663 C72.01697,54.055256,68.627846,55.1343,64.69876,56.859173 M64.33106,56.908463 C64.92005,54.381157,65.27687,51.546875,64.11182,47.303688 M65.28281,56.882133 C65.165825,53.64051,65.58029,51.117584,64.735725,47.661697 M295.54874,47.485703 M295.93906,48.864716 C298.995,50.094444,302.7428,50.60323,305.10828,52.980976 M295.11697,48.017544 C299.02573,49.843166,302.7847,52.122097,305.35126,52.005386 M304.60614,53.589848 C302.5134,54.78902,299.89804,54.6162,295.69125,56.694168 M304.72034,52.44577 C301.94812,53.681362,298.73346,55.495663,294.66714,56.929176 M295.4978,56.971836 C294.52567,54.78193,295.4597,52.423283,294.5224,47.509235 M294.73856,56.958282 C294.88004,55.112617,294.76443,52.899837,294.56372,47.680214" fill="none" stroke="#808080" stroke-width="1"/>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="95" y="22.5">
 T
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="125" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="105" y="22.5">
 h
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="135" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="115" y="22.5">
 i
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="145" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="125" y="22.5">
 n
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="155" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="135" y="22.5">
 g
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="175" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="155" y="22.5">
 1
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="345" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="325" y="22.5">
 T
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="355" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="335" y="22.5">
 h
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="365" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="345" y="22.5">
 i
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="375" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="355" y="22.5">
 n
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="385" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="365" y="22.5">
 g
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="405" y="67.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="385" y="22.5">
 2
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="105" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="85" y="52.5">
 i
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="115" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="95" y="52.5">
 n
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="125" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="105" y="52.5">
 s
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="195" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="175" y="52.5">
 o
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="205" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="185" y="52.5">
 u
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="215" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="195" y="52.5">
 t
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="225" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="205" y="52.5">
 s
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="335" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="315" y="52.5">
 i
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="345" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="325" y="52.5">
 n
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="355" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="335" y="52.5">
 s
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="425" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="405" y="52.5">
 o
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="435" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="415" y="52.5">
 u
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="445" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="425" y="52.5">
 t
 </text>
-<text dominant-baseline="middle" fill="#ffffffff" font-family="monospace" font-size="16" text-anchor="middle" x="455" y="97.5">
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="435" y="52.5">
 s
 </text>
 </svg>
