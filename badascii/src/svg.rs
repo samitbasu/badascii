@@ -35,7 +35,9 @@ pub fn stroke_opset(ops: Drawable<f32>, mut painter: svg::Document, color: &str)
 }
 
 pub fn render(job: &RenderJob, color: &str) -> String {
-    let mut context = svg::Document::new().set("viewBox", (0.0, 0.0, job.width, job.height));
+    let mut context = svg::Document::new()
+        .set("width", format!("{}px", job.width))
+        .set("viewBox", (0.0, 0.0, job.width, job.height));
     let delta_x = job.width / job.text.size().num_cols as f32;
     let delta_y = job.height / job.text.size().num_rows as f32;
     let (labels, drawables) = job.invoke();

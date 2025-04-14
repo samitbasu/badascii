@@ -497,6 +497,15 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 name = "badascii"
 version = "0.1.0"
 dependencies = [
+ "roughr",
+ "svg",
+]
+
+[[package]]
+name = "badascii-gui"
+version = "0.1.0"
+dependencies = [
+ "badascii",
  "eframe",
  "egui",
  "egui_dock",
@@ -505,7 +514,6 @@ dependencies = [
  "expect-test",
  "rand",
  "roughr",
- "svg",
 ]
 
 [[package]]
