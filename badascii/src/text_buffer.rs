@@ -76,6 +76,46 @@ impl TextBuffer {
             })
         })
     }
+    // Iterate in diagonal slices
+    //   1 4 6
+    //   7 2 5
+    //   9 8 3
+    pub fn iter_diag_down_right(&self) -> impl Iterator<Item = (TextCoordinate, char)> {
+        let first_col = (0..self.num_rows).map(|r| TextCoordinate { x: 0, y: r });
+        let first_row = (1..self.num_cols).map(|c| TextCoordinate { x: c, y: 0 });
+        let start_pos = first_col.chain(first_row);
+        start_pos
+            .flat_map(|s| {
+                (0..)
+                    .map(move |offset| TextCoordinate {
+                        x: s.x + offset,
+                        y: s.y + offset,
+                    })
+                    .take_while(|p| self.contains(p))
+            })
+            .flat_map(|p| self.get(p).map(|c| (p, c)))
+    }
+    pub fn iter_diag_up_right(&self) -> impl Iterator<Item = (TextCoordinate, char)> {
+        let first_col = (0..self.num_rows).map(|r| TextCoordinate { x: 0, y: r });
+        let last_row = (1..self.num_cols).map(|c| TextCoordinate {
+            x: c,
+            y: self.num_rows - 1,
+        });
+        let start_pos = first_col.chain(last_row);
+        start_pos
+            .flat_map(|s| {
+                (0..=s.y)
+                    .map(move |offset| TextCoordinate {
+                        x: s.x + offset,
+                        y: s.y - offset,
+                    })
+                    .take_while(|p| self.contains(p))
+            })
+            .flat_map(|p| self.get(p).map(|c| (p, c)))
+    }
+    fn contains(&self, tc: &TextCoordinate) -> bool {
+        (0..self.num_rows).contains(&tc.y) && (0..self.num_cols).contains(&tc.x)
+    }
     pub fn words(&self) -> impl Iterator<Item = (TextCoordinate, String)> {
         let mut prev_location: Option<TextCoordinate> = None;
         let mut start_location: Option<TextCoordinate> = None;
@@ -215,6 +255,30 @@ mod tests {
      |  |
      +--+"
         );
+    }
+
+    #[test]
+    fn test_diag_down_right_iterator() {
+        //  123  159487263
+        //  456
+        //  789
+        let test_text = "123\n456\n789\n";
+        let tb = TextBuffer::with_text(test_text);
+        let iter = tb.iter_diag_down_right().map(|x| x.1).collect::<String>();
+        let expect = expect!["159487263"];
+        expect.assert_eq(&iter);
+    }
+
+    #[test]
+    fn test_diag_down_left_iterator() {
+        //  1234    142753869
+        //  5678    1 52 963 074 18 2
+        //  9012
+        let test_text = "1234\n5678\n9012\n";
+        let tb = TextBuffer::with_text(test_text);
+        let iter = tb.iter_diag_up_right().map(|x| x.1).collect::<String>();
+        let expect = expect!["152963074182"];
+        expect.assert_eq(&iter);
     }
 
     #[test]

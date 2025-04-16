@@ -9,9 +9,26 @@ egui = "0.31.1"
 egui_dock = "0.16.0"
 egui_extras = "0.31.1"
 env_logger = "0.11.7"
-rand = "0.8.5"
 roughr = "0.9.0"
 badascii = { path = "../badascii" }
+log = "0.4"
+getrandom = { version = "0.2.15", features = ["js"] }
 
 [dev-dependencies]
 expect-test = "1.5.1"
+
+# native:
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger = "0.11"
+
+# web:
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3.70"
+
+[profile.release]
+opt-level = 2 # fast and small wasm
+
+# Optimize all dependencies even in debug builds:
+[profile.dev.package."*"]
+opt-level = 2

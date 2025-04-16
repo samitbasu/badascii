@@ -6,6 +6,14 @@ pub struct LineSegment {
     pub end: TextCoordinate,
 }
 
+#[derive(PartialEq, Eq)]
+enum Kind {
+    Horiz,
+    Vert,
+    DownSlant,
+    UpSlant,
+}
+
 impl LineSegment {
     pub fn id(&self) -> u32 {
         let sx = self.start.x & 0xFF;
@@ -14,25 +22,49 @@ impl LineSegment {
         let ey = self.end.y & 0xFF;
         (ey << 24) | (ex << 16) | (sy << 8) | (sx)
     }
-    pub fn iter(&self) -> impl Iterator<Item = TextCoordinate> {
-        let self_is_horiz = self.start.y == self.end.y;
-        let iter_range = if self_is_horiz {
-            self.start.x..=self.end.x
+    fn kind(&self) -> Kind {
+        let del_x = (self.end.x as i32) - (self.start.x as i32);
+        let del_y = (self.end.y as i32) - (self.start.y as i32);
+        if del_y == 0 {
+            Kind::Horiz
+        } else if del_x == 0 {
+            Kind::Vert
+        } else if del_x >= 0 && del_y >= 0 {
+            Kind::DownSlant
         } else {
-            self.start.y..=self.end.y
-        };
-        let mk_point = move |p| {
-            if self_is_horiz {
-                TextCoordinate {
-                    x: p,
-                    y: self.start.y,
-                }
-            } else {
-                TextCoordinate {
-                    x: self.start.x,
-                    y: p,
-                }
+            Kind::UpSlant
+        }
+    }
+    //
+    //   *                       *
+    //    *    dx>0, dy>0       *   dx>0, dy<0
+    //     *                   *
+    pub fn iter(&self) -> impl Iterator<Item = TextCoordinate> {
+        let kind = self.kind();
+        let iter_range = match kind {
+            Kind::UpSlant | Kind::DownSlant | Kind::Horiz => {
+                self.end.x.saturating_sub(self.start.x)
             }
+            Kind::Vert => self.end.y.saturating_sub(self.start.y),
+        };
+        let iter_range = 0..iter_range;
+        let mk_point = move |p| match kind {
+            Kind::Horiz => TextCoordinate {
+                x: self.start.x + p,
+                y: self.start.y,
+            },
+            Kind::Vert => TextCoordinate {
+                x: self.start.x,
+                y: self.start.y + p,
+            },
+            Kind::DownSlant => TextCoordinate {
+                x: self.start.x + p,
+                y: self.start.y + p,
+            },
+            Kind::UpSlant => TextCoordinate {
+                x: self.start.x + p,
+                y: self.start.y - p,
+            },
         };
         iter_range.map(mk_point)
     }
@@ -42,23 +74,11 @@ impl LineSegment {
         del_x.max(del_y) as u32
     }
     fn is_colinear(&self, other: &LineSegment) -> bool {
-        let self_is_horiz = self.start.y == self.end.y;
-        let other_is_horiz = other.start.y == other.end.y;
-        if self_is_horiz && other_is_horiz {
-            (self.start.y == other.start.y)
-                && (self.start.x == other.end.x
-                    || self.start.x == other.start.x
-                    || self.end.x == other.start.x
-                    || self.end.x == other.end.x)
-        } else if !self_is_horiz && !other_is_horiz {
-            (self.start.x == other.start.x)
-                && (self.start.y == other.end.y
-                    || self.start.y == other.start.y
-                    || self.end.y == other.start.y
-                    || self.end.y == other.end.y)
-        } else {
-            false
-        }
+        (self.kind() == other.kind())
+            && ((self.start == other.start)
+                || (self.end == other.start)
+                || (self.end == other.end)
+                || (self.start == other.end))
     }
     fn extend(&mut self, other: &LineSegment) {
         assert!(self.is_colinear(other));
@@ -89,10 +109,20 @@ impl LineSegment {
         else {
             return;
         };
-        self.start.x = min_x;
-        self.start.y = min_y;
-        self.end.x = max_x;
-        self.end.y = max_y;
+        match self.kind() {
+            Kind::Horiz | Kind::Vert | Kind::DownSlant => {
+                self.start.x = min_x;
+                self.start.y = min_y;
+                self.end.x = max_x;
+                self.end.y = max_y;
+            }
+            Kind::UpSlant => {
+                self.start.x = min_x;
+                self.start.y = max_y;
+                self.end.x = max_x;
+                self.end.y = min_y;
+            }
+        }
     }
 }
 
@@ -125,6 +155,22 @@ fn classify_vert(ch: char) -> Option<Class> {
     }
 }
 
+fn classify_diag_down_left(ch: char) -> Option<Class> {
+    match ch {
+        '+' => Some(Class::Term),
+        '/' => Some(Class::Edge),
+        _ => None,
+    }
+}
+
+fn classify_diag_down_right(ch: char) -> Option<Class> {
+    match ch {
+        '+' => Some(Class::Term),
+        '\\' => Some(Class::Edge),
+        _ => None,
+    }
+}
+
 fn merge_line_segment(segments: &mut Vec<LineSegment>, segment: LineSegment) {
     for candidate in segments.iter_mut() {
         if candidate.is_colinear(&segment) {
@@ -150,6 +196,9 @@ fn merge_colinear(mut segments: Vec<LineSegment>) -> Vec<LineSegment> {
 pub fn get_wires(tb: &TextBuffer) -> Vec<LineSegment> {
     let mut segments = get_horizontal_line_segments(tb);
     segments.extend(get_vertical_line_segments(tb));
+    segments.extend(get_diag_up_right_segments(tb));
+    segments.extend(get_diag_down_right_segments(tb));
+    segments.retain(|ls| ls.iter().flat_map(|p| tb.get(p)).any(|ch| ch != '+'));
     let mut segments = merge_colinear(segments);
     segments.sort_by_key(|l| l.id());
     segments
@@ -232,6 +281,22 @@ fn get_horizontal_line_segments(tb: &TextBuffer) -> Vec<LineSegment> {
         tb.iter()
             .filter_map(|(pos, ch)| classify_horiz(ch).map(|k| (pos, k))),
         |track, candidate| track.y == candidate.y && track.x + 1 == candidate.x,
+    )
+}
+
+fn get_diag_down_right_segments(tb: &TextBuffer) -> Vec<LineSegment> {
+    line_segment_finder(
+        tb.iter_diag_down_right()
+            .filter_map(|(pos, ch)| classify_diag_down_right(ch).map(|k| (pos, k))),
+        |track, candidate| track.y + 1 == candidate.y && track.x + 1 == candidate.x,
+    )
+}
+
+fn get_diag_up_right_segments(tb: &TextBuffer) -> Vec<LineSegment> {
+    line_segment_finder(
+        tb.iter_diag_up_right()
+            .filter_map(|(pos, ch)| classify_diag_down_left(ch).map(|k| (pos, k))),
+        |track, candidate| track.y == candidate.y + 1 && track.x + 1 == candidate.x,
     )
 }
 
