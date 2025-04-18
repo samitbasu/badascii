@@ -198,7 +198,6 @@ pub fn get_wires(tb: &TextBuffer) -> Vec<LineSegment> {
     segments.extend(get_vertical_line_segments(tb));
     segments.extend(get_diag_up_right_segments(tb));
     segments.extend(get_diag_down_right_segments(tb));
-    segments.retain(|ls| ls.iter().flat_map(|p| tb.get(p)).any(|ch| ch != '+'));
     let mut segments = merge_colinear(segments);
     segments.sort_by_key(|l| l.id());
     segments
@@ -347,5 +346,41 @@ mod tests {
         buffer.paste(INITIAL_TEXT, TextCoordinate { x: 2, y: 2 });
         let wires = get_wires(&buffer);
         assert_eq!(wires.len(), 2);
+    }
+
+    #[test]
+    fn test_short_line_extraction() {
+        const INITIAL_TEXT: &str = "
+  +
+  v        
+        ";
+        let mut buffer = TextBuffer::new(20, 20);
+        buffer.paste(INITIAL_TEXT, TextCoordinate { x: 2, y: 2 });
+        let wires = get_wires(&buffer);
+        let expect = expect_test::expect![[r#"
+            [
+                LineSegment {
+                    start: TextCoordinate {
+                        x: 4,
+                        y: 3,
+                    },
+                    end: TextCoordinate {
+                        x: 4,
+                        y: 4,
+                    },
+                },
+            ]
+        "#]];
+        expect.assert_debug_eq(&wires);
+    }
+
+    fn test_tee_case() {
+        const INITIAL_TEXT: &str = "
+    +
+    |
+    +-->
+    |
+    v    
+    ";
     }
 }
