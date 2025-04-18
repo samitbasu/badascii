@@ -128,7 +128,7 @@ impl MyApp {
         let rows = rows.parse::<u32>().ok()?.min(1024);
         let cols = cols.parse::<u32>().ok()?.min(1024);
         let decoded = URL_SAFE.decode(&vals).ok()?;
-        let decompressed = decompress_to_vec(&decoded).ok()?;
+        let decompressed = miniz_oxide::inflate::decompress_to_vec(&decoded).ok()?;
         let ascii = String::from_utf8_lossy(&decompressed);
         let mut me = Self::default();
         me.text.clear_all();
