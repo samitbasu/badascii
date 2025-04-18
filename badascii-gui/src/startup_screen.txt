@@ -3,18 +3,18 @@
 |  The syntax is pretty simple.  Every line starts or ends with one of these characters:        |
 |                                                                                               |
 |   +--+Line Ends+------+  +---+Line Parts++--+     +--+Examples+-------------------------+     |
-|   | <    Left arrow   |  |                  |     | +>    <->   ^      ^   ^     +--->  |     |
+|   | <    Left arrow   |  |                  |     |       <->   ^      ^   ^     +--->  |     |
 |   |   >  Right arrow  |  |  |   Vertical    |     |             |      |   +            |     |
-|   | ^    Up arrow     |  |                  |     | <+ +  <>    +  +   v         <---+  |     |
-|   |   v  Down arrow   |  |  -   Horizontal  |     |    |           |       ^            |     |
-|   |  +   Endpoint     |  |                  |     |   <+>          v       +--->        |     |
+|   | ^    Up arrow     |  |  -   Horizontal  |     | <+ +  <>    +  +   v         <---+  |     |
+|   |   v  Down arrow   |  |  /   Diagonal    |     |    |           |       ^            |     |
+|   |  +   Endpoint     |  |  \               |     |   <+>          v       +-->         |     |
 |   +-------------------+  +------------------+     +-------------------------------------+     |
 | You can select things with the left mouse button by dragging a rectangle,    +----------------+
 | and then moving it about on the canvas. You can also zoom in and pan about.  |zoom: CTRL+Wheel|
 |                                                                              |                |
-|            +---------+                      To Here!                         |pan: Right Btn  |
-|   Try it!  | Move Me |     +-------->                       You can use Undo |     Drag       |
-|            +---------+                                      &  move it back! +----------------+
+|           +-----------+                     To Here!                         |pan: Right Btn  |
+|   Try it!  \ Move Me /     +-------->                       You can use Undo |     Drag       |
+|             +-------+                                       &  move it back! +----------------+
 |                                                                                               |
 |      You can navigate on the canvas with the arrow keys.                                      |
 |                                                                                               |

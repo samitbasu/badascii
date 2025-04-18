@@ -50,3 +50,10 @@ are:
 - Editable with no special tools
 - Meant to show basic blocks and their relationships
 - Flexible enough to do all the things, but not complicated.
+
+
+
+TODO
+
+- [ ] Fix background on SVGs
+- [ ] Add help link?

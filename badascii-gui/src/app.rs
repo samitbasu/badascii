@@ -5,11 +5,11 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE};
 use eframe::CreationContext;
 use egui::{
     Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
-    Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
+    OpenUrl, Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
     global_theme_preference_switch, util::hash, vec2,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
-use miniz_oxide::{deflate::compress_to_vec, inflate::decompress_to_vec};
+use miniz_oxide::deflate::compress_to_vec;
 
 use crate::{action::Action, roughr_egui::stroke_opset};
 
@@ -486,7 +486,7 @@ impl MyApp {
     fn ascii_control_panel(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             global_theme_preference_switch(ui);
-            if ui.button("⚙").clicked() {
+            if ui.button("⚙").on_hover_text("Canvas Size").clicked() {
                 self.resize = Some(Size {
                     num_cols: self.num_cols,
                     num_rows: self.num_rows,
@@ -504,14 +504,22 @@ impl MyApp {
             {
                 self.redo();
             }
-            if ui.button("📋").clicked() {
+            if ui
+                .button("📋")
+                .on_hover_text("Copy ASCII version to clipboard")
+                .clicked()
+            {
                 let ascii = self.text.render();
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(ascii)))
             }
             if ui.button("Clear").clicked() {
                 self.text.clear_all();
             }
-            if ui.button("🔗").clicked() {
+            if ui
+                .button("🔗")
+                .on_hover_text("Copy URL for this diagram")
+                .clicked()
+            {
                 let ascii = self.text.render();
                 let compressed = compress_to_vec(ascii.as_bytes(), 10);
                 let encoded = URL_SAFE.encode(compressed);
@@ -523,13 +531,29 @@ impl MyApp {
                 );
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(url)));
             }
+            if ui
+                .button("")
+                .on_hover_text("Go to GitHub Source")
+                .clicked()
+            {
+                ui.output_mut(|o| {
+                    o.commands
+                        .push(egui::OutputCommand::OpenUrl(OpenUrl::new_tab(
+                            "https://github.com/samitbasu/badascii",
+                        )))
+                });
+            }
         });
     }
     fn preview_control_panel(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             global_theme_preference_switch(ui);
             ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
-            if ui.button("📋").clicked() {
+            if ui
+                .button("📋")
+                .on_hover_text("Copy raw SVG image to clipboard")
+                .clicked()
+            {
                 let job = RenderJob {
                     width: self.num_cols as f32 * 10.0,
                     height: self.num_rows as f32 * 15.0,
