@@ -1,6 +1,6 @@
 {
-  "name": "egui Template PWA",
-  "short_name": "egui-template-pwa",
+  "name": "BadAscii PWA",
+  "short_name": "badascii-pwa",
   "icons": [
     {
       "src": "./assets/icon-256.png",

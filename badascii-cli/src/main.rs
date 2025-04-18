@@ -57,6 +57,10 @@ struct Args {
     /// it here.
     #[arg(short, long)]
     color: Option<String>,
+    /// Override the color used for the background of the
+    /// SVG.  By default, the SVGs render in dark mode.
+    #[arg(short, long)]
+    background: Option<String>,
 }
 
 fn main() {
@@ -84,7 +88,8 @@ fn main() {
         job.height = height;
     }
     let color = args.color.unwrap_or_else(|| "#808080".to_string());
-    let svg = badascii::svg::render(&job, &color);
+    let background = args.background.unwrap_or_else(|| "#0A0A0A".to_string());
+    let svg = badascii::svg::render(&job, &color, &background);
     if let Some(output) = args.output.as_ref() {
         std::fs::write(output, svg)
             .unwrap_or_else(|_| panic!("Unable to write to output file {}", output.display()));

@@ -34,10 +34,21 @@ pub fn stroke_opset(ops: Drawable<f32>, mut painter: svg::Document, color: &str)
     painter
 }
 
-pub fn render(job: &RenderJob, color: &str) -> String {
+pub fn render(job: &RenderJob, color: &str, background: &str) -> String {
     let mut context = svg::Document::new()
         .set("width", format!("{}px", job.width))
         .set("viewBox", (0.0, 0.0, job.width, job.height));
+    if background != "none" {
+        context = context.add(
+            svg::node::element::Rectangle::new()
+                .set("fill", background)
+                .set("stroke", "none")
+                .set("width", format!("{}px", job.width))
+                .set("height", format!("{}px", job.height))
+                .set("x", "0.0")
+                .set("y", "0.0"),
+        )
+    }
     let delta_x = job.width / job.text.size().num_cols as f32;
     let delta_y = job.height / job.text.size().num_rows as f32;
     let (labels, drawables) = job.invoke();
@@ -97,6 +108,7 @@ v    |                     |   |
                 y0: 0.0,
             },
             "white",
+            "none",
         );
         let expect = expect_file!["todo.svg"];
         expect.assert_eq(&svg);
@@ -149,6 +161,7 @@ v    |                     |   |
                 y0: 0.0,
             },
             "white",
+            "black",
         );
         expect_file!["rough.svg"].assert_eq(&svg);
     }

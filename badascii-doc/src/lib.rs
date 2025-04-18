@@ -19,7 +19,7 @@ pub fn badascii_formal(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as LitStr);
     let text_buffer = get_text_buffer(input);
     let job = RenderJob::formal(text_buffer);
-    let svg = badascii::svg::render(&job, "currentColor");
+    let svg = badascii::svg::render(&job, "currentColor", "none");
     let svg = format!("<p>{svg}</p>");
     quote!(#svg).into()
 }
@@ -29,7 +29,7 @@ pub fn badascii(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as LitStr);
     let text_buffer = get_text_buffer(input);
     let job = RenderJob::rough(text_buffer);
-    let svg = badascii::svg::render(&job, "currentColor");
+    let svg = badascii::svg::render(&job, "currentColor", "none");
     let svg = format!("<p>{svg}</p>");
     quote!(#svg).into()
 }

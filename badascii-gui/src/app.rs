@@ -563,7 +563,8 @@ impl MyApp {
                     y0: 0.0,
                 };
                 let text_color = ui.visuals().strong_text_color().to_hex();
-                let svg = badascii::svg::render(&job, &text_color);
+                let background_color = ui.visuals().extreme_bg_color.to_hex();
+                let svg = badascii::svg::render(&job, &text_color, &background_color);
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
             }
         });

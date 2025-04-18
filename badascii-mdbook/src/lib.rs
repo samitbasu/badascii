@@ -11,7 +11,8 @@ pub struct BadAscii;
 fn create_svg_html(s: &str) -> String {
     let tb = badascii::TextBuffer::with_text(s);
     let job = badascii::RenderJob::rough(tb);
-    let svg = badascii::svg::render(&job, "#808080");
+    // TODO - figure out light vs dark mode for MDBook?
+    let svg = badascii::svg::render(&job, "#808080", "#0A0A0A");
     format!("\n\n<pre>{svg}</pre>\n")
 }
 impl BadAscii {
