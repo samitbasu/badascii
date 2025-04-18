@@ -4,3 +4,10 @@ setup:
     
 serve:
     trunk serve
+
+release:
+    trunk build --release
+    
+deploy:
+    just release
+    cd dist && zip deploy.zip *

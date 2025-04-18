@@ -373,14 +373,4 @@ mod tests {
         "#]];
         expect.assert_debug_eq(&wires);
     }
-
-    fn test_tee_case() {
-        const INITIAL_TEXT: &str = "
-    +
-    |
-    +-->
-    |
-    v    
-    ";
-    }
 }
