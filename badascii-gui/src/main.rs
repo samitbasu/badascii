@@ -3,15 +3,22 @@ use badascii_gui::app::MyApp;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+    use eframe::icon_data;
+
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    let icon = std::sync::Arc::new(
+        icon_data::from_png_bytes(include_bytes!("../assets/icon-1024.png")).unwrap(),
+    );
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([800.0, 600.0])
+            .with_icon(icon),
         ..Default::default()
     };
     eframe::run_native(
         "BadAscii",
         options,
-        Box::new(|_cc| Ok(Box::<MyApp>::default())),
+        Box::new(|cc| Ok(Box::new(MyApp::new(cc)))),
     )
 }
 
@@ -41,7 +48,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|_cc| Ok(Box::<MyApp>::default())),
+                Box::new(|cc| Ok(Box::new(MyApp::new(cc)))),
             )
             .await;
 

@@ -506,6 +506,7 @@ name = "badascii-gui"
 version = "0.1.0"
 dependencies = [
  "badascii",
+ "base64",
  "eframe",
  "egui",
  "egui_dock",
@@ -514,10 +515,17 @@ dependencies = [
  "expect-test",
  "getrandom 0.2.15",
  "log",
+ "miniz_oxide",
  "roughr",
  "wasm-bindgen-futures",
  "web-sys",
 ]
+
+[[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bit-set"
@@ -2061,9 +2069,9 @@ dependencies = [
 
 [[package]]
 name = "miniz_oxide"
-version = "0.8.5"
+version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e3e04debbb59698c15bacbb6d93584a8c0ca9cc3213cb423d31f760d8843ce5"
+checksum = "3be647b768db090acb35d5ec5db2b0e1f1de11133ca123b9eacf5137868f892a"
 dependencies = [
  "adler2",
  "simd-adler32",

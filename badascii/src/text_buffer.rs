@@ -220,7 +220,7 @@ impl TextBuffer {
             .collect::<Vec<_>>();
         buf.join("\n")
     }
-
+    #[must_use]
     pub fn resize(&self, resize: Size) -> TextBuffer {
         let mut output = TextBuffer::new(resize.num_rows, resize.num_cols);
         for row in 0..resize.num_rows {

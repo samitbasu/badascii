@@ -1,12 +1,15 @@
 use std::collections::VecDeque;
 
 use badascii::{RenderJob, TextBuffer, rect::Rectangle, tc::TextCoordinate, text_buffer::Size};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE};
+use eframe::CreationContext;
 use egui::{
     Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
     Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
     global_theme_preference_switch, util::hash, vec2,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
+use miniz_oxide::{deflate::compress_to_vec, inflate::decompress_to_vec};
 
 use crate::{action::Action, roughr_egui::stroke_opset};
 
@@ -79,6 +82,7 @@ pub struct MyApp {
     drag_delta: Option<Vec2>,
     rough_mode: bool,
     reset_zoom: bool,
+    base_url: String,
 }
 
 const INITIAL_TEXT: &str = include_str!("startup_screen.txt");
@@ -109,11 +113,41 @@ impl Default for MyApp {
             drag_delta: None,
             rough_mode: true,
             reset_zoom: false,
+            base_url: Default::default(),
         }
     }
 }
 
 impl MyApp {
+    #[cfg(target_arch = "wasm32")]
+    fn load_from_url(cc: &CreationContext) -> Option<Self> {
+        let map = &cc.integration_info.web_info.location.query_map;
+        let vals = map.get("d")?.first()?;
+        let rows = map.get("r")?.first()?;
+        let cols = map.get("c")?.first()?;
+        let rows = rows.parse::<u32>().ok()?.min(1024);
+        let cols = cols.parse::<u32>().ok()?.min(1024);
+        let decoded = URL_SAFE.decode(&vals).ok()?;
+        let decompressed = decompress_to_vec(&decoded).ok()?;
+        let ascii = String::from_utf8_lossy(&decompressed);
+        let mut me = Self::default();
+        me.text.clear_all();
+        me.text = me.text.resize(Size {
+            num_cols: cols,
+            num_rows: rows,
+        });
+        me.text.paste(&ascii, TextCoordinate { x: 0, y: 0 });
+        me.num_rows = rows;
+        me.num_cols = cols;
+        Some(me)
+    }
+
+    pub fn new(cc: &CreationContext) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        return Self::load_from_url(cc).unwrap_or_default();
+        #[cfg(not(target_arch = "wasm32"))]
+        Self::default()
+    }
     fn map_pos_to_coords(&self, canvas: &Rect, pos: Pos2) -> Option<TextCoordinate> {
         let top_left = canvas.left_top();
         let delta = pos - top_left;
@@ -274,6 +308,9 @@ impl MyApp {
         }
     }
     fn on_action_with_text(&mut self, text_state: TextState, action: Action) {
+        if self.resize.is_some() {
+            return;
+        }
         let TextState { cursor, origin } = text_state;
         match action.clone() {
             Action::Paste(txt) => {
@@ -473,6 +510,18 @@ impl MyApp {
             }
             if ui.button("Clear").clicked() {
                 self.text.clear_all();
+            }
+            if ui.button("🔗").clicked() {
+                let ascii = self.text.render();
+                let compressed = compress_to_vec(ascii.as_bytes(), 10);
+                let encoded = URL_SAFE.encode(compressed);
+                let num_cols = self.text.size().num_cols;
+                let num_rows = self.text.size().num_rows;
+                let url = format!(
+                    "{}/?d={}&c={}&r={}",
+                    self.base_url, encoded, num_cols, num_rows
+                );
+                ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(url)));
             }
         });
     }
@@ -836,6 +885,11 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui| {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let location = &_frame.info().web_info.location;
+                    self.base_url = location.origin.clone();
+                }
                 self.resize_panel(ui);
                 let mut dockstate = self.dock_state.clone();
                 DockArea::new(&mut dockstate)

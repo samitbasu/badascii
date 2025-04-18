@@ -13,6 +13,8 @@ roughr = "0.9.0"
 badascii = { path = "../badascii" }
 log = "0.4"
 getrandom = { version = "0.2.15", features = ["js"] }
+miniz_oxide = { version = "0.8.8", features = ["std"] }
+base64 = "0.22.1"
 
 [dev-dependencies]
 expect-test = "1.5.1"
