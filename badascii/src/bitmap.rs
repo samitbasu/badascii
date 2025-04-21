@@ -1,8 +1,9 @@
 use std::{io::Write, sync::Arc};
 
+use ab_glyph::ScaleFont;
 use rasterize::{
-    ActiveEdgeRasterizer, BBox, Image, LinColor, LineCap, LineJoin, Path, Scene, StrokeStyle,
-    Transform,
+    ActiveEdgeRasterizer, BBox, Color, Image, ImageMut, LinColor, LineCap, LineJoin, Path, Scene,
+    StrokeStyle, Transform,
 };
 use roughr::core::{Drawable, OpSetType, OpType};
 
@@ -10,7 +11,7 @@ use crate::{RenderJob, render::vec2, tc::TextCoordinate};
 
 type Error = Box<dyn std::error::Error>;
 
-pub fn stroke_opset(ops: Drawable<f32>, color: &str) -> Option<Scene> {
+pub fn stroke_opset(ops: Drawable<f32>, color: LinColor) -> Scene {
     let mut scenes = vec![];
     for op_set in ops.sets {
         if op_set.op_set_type != OpSetType::Path {
@@ -36,7 +37,7 @@ pub fn stroke_opset(ops: Drawable<f32>, color: &str) -> Option<Scene> {
         }
         scenes.push(Scene::stroke(
             path.build().into(),
-            Arc::new(color.parse::<LinColor>().ok()?),
+            Arc::new(color),
             StrokeStyle {
                 width: 1.0,
                 line_join: LineJoin::default(),
@@ -44,10 +45,14 @@ pub fn stroke_opset(ops: Drawable<f32>, color: &str) -> Option<Scene> {
             },
         ));
     }
-    Some(Scene::group(scenes))
+    Scene::group(scenes)
 }
 
 pub fn render(w: impl Write, job: &RenderJob, color: &str, background: &str) -> Result<(), Error> {
+    use ab_glyph::{Font, FontRef, Glyph, point};
+
+    let font = FontRef::try_from_slice(include_bytes!("../font/Hack-Regular.ttf"))?;
+    let color = color.parse::<LinColor>()?;
     let delta_x = job.width / job.text.size().num_cols as f32;
     let delta_y = job.height / job.text.size().num_rows as f32;
     let (labels, drawables) = job.invoke();
@@ -56,16 +61,38 @@ pub fn render(w: impl Write, job: &RenderJob, color: &str, background: &str) -> 
     };
     let elements = drawables
         .into_iter()
-        .flat_map(|op| stroke_opset(op, color))
+        .map(|op| stroke_opset(op, color))
         .collect::<Vec<_>>();
     let background = background.parse::<LinColor>().ok();
     let scene = Scene::group(elements);
-    let image = scene.render(
+    let mut image = scene.render(
         &ActiveEdgeRasterizer::default(),
         Transform::identity(),
         Some(BBox::new((0.0, 0.0), (job.width as f64, job.height as f64))),
         background,
     );
+    let shape = image.shape();
+    dbg!(&shape);
+    let mut im_mut = image.as_mut();
+    let data_mut = im_mut.data_mut();
+    let text_size = delta_x.min(delta_y) * 1.6;
+    let ascent = font.as_scaled(text_size).ascent();
+    for (coord, word) in labels.iter() {
+        let center = pos_map(coord);
+        let glyph: Glyph = font.glyph_id(word).with_scale_and_position(
+            text_size,
+            point(center.x - delta_x / 2.0, center.y - delta_y / 2.0 + ascent),
+        );
+        if let Some(q) = font.outline_glyph(glyph) {
+            let bound = q.px_bounds();
+            q.draw(|x, y, c| {
+                let x = bound.min.x + x as f32;
+                let y = bound.min.y + y as f32;
+                let ndx = shape.offset(y as usize, x as usize);
+                data_mut[ndx] = data_mut[ndx].lerp(color, c);
+            })
+        }
+    }
     image.write_png(w)?;
     Ok(())
     /*     let text_size = delta_x.min(delta_y) * 1.6;
@@ -94,9 +121,7 @@ mod tests {
     #[test]
     fn test_startup_screen() {
         let tb = TextBuffer::with_text(include_str!("startup_screen.txt"));
-        let mut job = RenderJob::rough(tb);
-        job.height *= 2.0;
-        job.width *= 2.0;
+        let job = RenderJob::rough(tb);
         let path = std::path::Path::new(r"image.png");
         let file = std::fs::File::create(path).unwrap();
         let w = std::io::BufWriter::new(file);

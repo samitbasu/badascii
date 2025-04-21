@@ -308,14 +308,14 @@ mod tests {
         const CUP_EXAMPLE: &str = "
 +-----+
       |
-      |<-----o 
+      |<-----+ 
       |
 +-----+
 ";
         let mut text_buffer = TextBuffer::new(20, 20);
         text_buffer.paste(CUP_EXAMPLE, TextCoordinate { x: 1, y: 1 });
         let wires = get_wires(&text_buffer);
-        assert_eq!(wires.len(), 2);
+        assert_eq!(wires.len(), 4);
     }
 
     #[test]
