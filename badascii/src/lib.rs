@@ -7,3 +7,5 @@ pub mod text_buffer;
 pub use render::RenderJob;
 pub use roughr::core::Options;
 pub use text_buffer::TextBuffer;
+//pub mod png;
+pub mod bitmap;

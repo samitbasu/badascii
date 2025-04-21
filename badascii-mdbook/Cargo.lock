@@ -159,6 +159,7 @@ dependencies = [
 name = "badascii"
 version = "0.1.0"
 dependencies = [
+ "points_on_curve",
  "roughr",
  "svg",
 ]

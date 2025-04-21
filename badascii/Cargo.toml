@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rasterize = { version = "0.6.5", default-features = false, features = ["png"] }
 roughr = "0.9.0"
 svg = "0.18.0"
 
