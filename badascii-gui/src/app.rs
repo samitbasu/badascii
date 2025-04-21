@@ -4,12 +4,13 @@ use badascii::{RenderJob, TextBuffer, rect::Rectangle, tc::TextCoordinate, text_
 use base64::{Engine as _, engine::general_purpose::URL_SAFE};
 use eframe::CreationContext;
 use egui::{
-    Align2, Button, Checkbox, Color32, CursorIcon, DragValue, Event, FontId, Key, Modifiers,
-    OpenUrl, Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
+    Align2, Button, Checkbox, Color32, ColorImage, CursorIcon, DragValue, Event, FontId, Key,
+    Modifiers, OpenUrl, Painter, Pos2, Rect, Response, Scene, Sense, Ui, Vec2, epaint::PathStroke,
     global_theme_preference_switch, util::hash, vec2,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, Style, TabViewer};
 use miniz_oxide::deflate::compress_to_vec;
+use rasterize::Image;
 
 use crate::{action::Action, roughr_egui::stroke_opset};
 
@@ -80,6 +81,7 @@ pub struct MyApp {
     dock_state: DockState<Tab>,
     scene_rect: Rect,
     drag_delta: Option<Vec2>,
+    canvas_size: Vec2,
     rough_mode: bool,
     reset_zoom: bool,
     base_url: String,
@@ -114,6 +116,7 @@ impl Default for MyApp {
             rough_mode: true,
             reset_zoom: false,
             base_url: Default::default(),
+            canvas_size: vec2(1000.0, 600.0),
         }
     }
 }
@@ -142,9 +145,9 @@ impl MyApp {
         Some(me)
     }
 
-    pub fn new(cc: &CreationContext) -> Self {
+    pub fn new(_cc: &CreationContext) -> Self {
         #[cfg(target_arch = "wasm32")]
-        return Self::load_from_url(cc).unwrap_or_default();
+        return Self::load_from_url(_cc).unwrap_or_default();
         #[cfg(not(target_arch = "wasm32"))]
         Self::default()
     }
@@ -550,7 +553,7 @@ impl MyApp {
             global_theme_preference_switch(ui);
             ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
             if ui
-                .button("📋")
+                .button("SVG")
                 .on_hover_text("Copy raw SVG image to clipboard")
                 .clicked()
             {
@@ -566,6 +569,42 @@ impl MyApp {
                 let background_color = ui.visuals().extreme_bg_color.to_hex();
                 let svg = badascii::svg::render(&job, &text_color, &background_color);
                 ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyText(svg)))
+            }
+            if ui
+                .button("📋")
+                .on_hover_text("Copy image to clipboard")
+                .clicked()
+            {
+                let job = RenderJob {
+                    width: self.canvas_size.x * 2.0,
+                    height: self.canvas_size.y * 2.0,
+                    text: self.text.clone(),
+                    options: self.roughr_options(),
+                    x0: 0.0,
+                    y0: 0.0,
+                };
+                let text_color = ui.visuals().strong_text_color().to_hex();
+                let background_color = ui.visuals().extreme_bg_color.to_hex();
+                if let Ok(img) = badascii::bitmap::render(&job, &text_color, &background_color) {
+                    let shape = img.shape();
+                    let mut egui_image =
+                        ColorImage::new([shape.width, shape.height], Color32::TRANSPARENT);
+                    let data = img.data();
+                    let shape = img.shape();
+                    for row in 0..shape.height {
+                        for col in 0..shape.width {
+                            let color = &data[shape.offset(row, col)];
+                            egui_image.pixels[row * shape.width + col] =
+                                Color32::from_rgba_premultiplied(
+                                    (color.red() * 255.0) as u8,
+                                    (color.green() * 255.0) as u8,
+                                    (color.blue() * 255.0) as u8,
+                                    (color.alpha() * 255.0) as u8,
+                                );
+                        }
+                    }
+                    ui.output_mut(|o| o.commands.push(egui::OutputCommand::CopyImage(egui_image)))
+                }
             }
         });
     }
@@ -661,6 +700,7 @@ impl MyApp {
         }
     }
     fn draw_rendered_schematic(&mut self, canvas: &Rect, painter: &Painter, color: Color32) {
+        self.canvas_size = canvas.size();
         let top_left = canvas.left_top();
         let mut text = self.text.clone();
         if let Tool::Selected(_rect) = &self.tool {

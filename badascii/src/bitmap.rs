@@ -1,8 +1,8 @@
-use std::{io::Write, sync::Arc};
+use std::sync::Arc;
 
 use ab_glyph::ScaleFont;
 use rasterize::{
-    ActiveEdgeRasterizer, BBox, Color, Image, ImageMut, LinColor, LineCap, LineJoin, Path, Scene,
+    ActiveEdgeRasterizer, BBox, Color, Image, ImageMut, LinColor, LineCap, LineJoin, Scene,
     StrokeStyle, Transform,
 };
 use roughr::core::{Drawable, OpSetType, OpType};
@@ -48,7 +48,11 @@ pub fn stroke_opset(ops: Drawable<f32>, color: LinColor) -> Scene {
     Scene::group(scenes)
 }
 
-pub fn render(w: impl Write, job: &RenderJob, color: &str, background: &str) -> Result<(), Error> {
+pub fn render(
+    job: &RenderJob,
+    color: &str,
+    background: &str,
+) -> Result<rasterize::Layer<LinColor>, Error> {
     use ab_glyph::{Font, FontRef, Glyph, point};
 
     let font = FontRef::try_from_slice(include_bytes!("../font/Hack-Regular.ttf"))?;
@@ -72,7 +76,6 @@ pub fn render(w: impl Write, job: &RenderJob, color: &str, background: &str) -> 
         background,
     );
     let shape = image.shape();
-    dbg!(&shape);
     let mut im_mut = image.as_mut();
     let data_mut = im_mut.data_mut();
     let text_size = delta_x.min(delta_y) * 1.6;
@@ -93,23 +96,7 @@ pub fn render(w: impl Write, job: &RenderJob, color: &str, background: &str) -> 
             })
         }
     }
-    image.write_png(w)?;
-    Ok(())
-    /*     let text_size = delta_x.min(delta_y) * 1.6;
-       for (coord, word) in labels.iter() {
-           let center = pos_map(coord);
-           let text = svg::node::element::Text::new(word)
-               .set("x", center.x)
-               .set("y", center.y)
-               .set("font-family", "monospace")
-               .set("font-size", text_size)
-               .set("text-anchor", "middle")
-               .set("dominant-baseline", "middle")
-               .set("fill", color);
-           context = context.add(text);
-       }
-       context.to_string()
-    */
+    Ok(image)
 }
 
 #[cfg(test)]
@@ -125,6 +112,7 @@ mod tests {
         let path = std::path::Path::new(r"image.png");
         let file = std::fs::File::create(path).unwrap();
         let w = std::io::BufWriter::new(file);
-        render(w, &job, "#FFFFFF", "#000000").unwrap();
+        let img = render(&job, "#FFFFFF", "#000000").unwrap();
+        img.write_png(w).unwrap();
     }
 }
