@@ -553,13 +553,13 @@ impl MyApp {
             global_theme_preference_switch(ui);
             ui.add(Checkbox::new(&mut self.rough_mode, "Rough Sketch"));
             if ui
-                .button("SVG")
-                .on_hover_text("Copy raw SVG image to clipboard")
+                .button("SVG 📋")
+                .on_hover_text("Copy raw SVG to clipboard")
                 .clicked()
             {
                 let job = RenderJob {
-                    width: self.num_cols as f32 * 10.0,
-                    height: self.num_rows as f32 * 15.0,
+                    width: self.canvas_size.x * 2.0,
+                    height: self.canvas_size.y * 2.0,
                     text: self.text.clone(),
                     options: self.roughr_options(),
                     x0: 0.0,
