@@ -1,0 +1,81 @@
+<svg viewBox="0 0 500 150" xmlns="http://www.w3.org/2000/svg">
+<path d="M75.74456,7.8446527 M75.743996,7.3801293 C124.47752,10.076206,173.89938,9.565853,213.41696,7.2238307 M74.915375,7.7817225 C110.27632,5.576689,145.82991,6.0827694,214.59538,6.8722835 M304.42392,5.6656218 M306.02335,8.846221 C335.44443,10.621019,365.07794,8.288117,446.17606,7.4141617 M305.60617,6.553427 C335.6204,9.725004,368.6817,10.275829,445.05496,8.310745 M24.661188,52.639706 M23.265625,50.648552 C33.85902,53.893463,40.582268,51.438957,64.156395,54.238876 M24.145452,51.985542 C38.447243,52.83909,53.880756,52.293266,65.5513,52.789204 M215.96246,51.064762 M216.71315,51.269863 C236.947,55.21655,263.42447,54.90281,294.43524,53.952946 M214.80542,53.093372 C239.56036,53.27559,264.7426,52.887066,294.81134,53.372036 M444.5898,52.304516 M446.96298,52.981518 C462.11038,52.60142,476.90677,53.58905,494.84882,51.39453 M444.29395,53.43625 C461.6406,53.333,477.75693,52.481667,495.80115,51.7629 M75.21955,8.295328 M73.82482,9.257323 C77.232956,31.063044,77.47969,52.343067,73.29181,99.41869 M75.912544,8.337383 C75.871666,35.746597,75.3075,64.4137,74.30544,97.93201 M216.29182,9.12585 M215.69107,6.9741564 C214.63718,35.824944,216.66202,60.625378,214.87903,96.065475 M214.94087,6.8451614 C213.67558,28.944977,212.3828,51.602886,215.5351,98.36293 M73.30957,95.792946 M74.63829,96.06416 C118.21134,95.31705,160.6531,97.58761,213.31133,99.493324 M75.75447,97.01277 C111.70974,94.532646,148.0729,96.099846,215.25706,97.35682 M306.54767,5.6205573 M304.78952,6.6295786 C305.5645,29.167267,304.58554,49.665207,303.40445,96.44158 M305.43634,8.089199 C307.46313,39.397713,306.9899,69.23987,304.02948,97.75037 M443.4081,7.359603 M446.46817,8.400138 C444.70047,41.85544,443.25888,74.54808,443.22644,96.76188 M445.9092,8.156117 C443.34528,40.064644,443.72937,74.573784,445.5663,97.56023 M303.54922,97.666176 M306.8341,96.34375 C351.1425,101.25397,397.27255,101.01693,444.2234,98.89518 M304.71463,97.91388 C356.72733,96.78258,407.54285,96.44949,444.00964,96.56998 M26.93698,53.648666 M25.734728,51.66842 C24.327631,71.6919,25.443047,88.332886,26.137257,125.984375 M24.808317,53.304977 C24.934252,74.709305,24.218773,98.83825,24.453344,127.23712 M495.60452,50.91769 M496.8961,52.428448 C491.7149,77.21134,493.76263,103.66585,496.42422,127.17359 M494.2056,52.393044 C494.7673,81.57652,495.4331,110.558975,494.11505,127.45054 M26.963734,128.34218 M25.541912,127.29213 C125.13948,125.91964,226.94507,127.42034,494.64026,127.87768 M25.38061,127.15208 C208.4125,124.291756,391.21695,124.44366,494.99194,127.15021 M63.986385,48.0466 M64.17135,47.93094 C66.5497,49.334835,70.4823,50.588066,74.42047,52.488514 M65.4556,47.90218 C68.82242,50.094448,71.369865,51.583717,74.921906,52.09033 M76.04941,52.817585 C71.95212,53.82718,70.92057,53.71838,65.77272,57.489395 M74.77698,52.460663 C72.01697,54.055256,68.627846,55.1343,64.69876,56.859173 M64.33106,56.908463 C64.92005,54.381157,65.27687,51.546875,64.11182,47.303688 M65.28281,56.882133 C65.165825,53.64051,65.58029,51.117584,64.735725,47.661697 M295.54874,47.485703 M295.93906,48.864716 C298.995,50.094444,302.7428,50.60323,305.10828,52.980976 M295.11697,48.017544 C299.02573,49.843166,302.7847,52.122097,305.35126,52.005386 M304.60614,53.589848 C302.5134,54.78902,299.89804,54.6162,295.69125,56.694168 M304.72034,52.44577 C301.94812,53.681362,298.73346,55.495663,294.66714,56.929176 M295.4978,56.971836 C294.52567,54.78193,295.4597,52.423283,294.5224,47.509235 M294.73856,56.958282 C294.88004,55.112617,294.76443,52.899837,294.56372,47.680214" fill="none" stroke="#808080" stroke-width="1"/>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="95" y="22.5">
+T
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="105" y="22.5">
+h
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="115" y="22.5">
+i
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="125" y="22.5">
+n
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="135" y="22.5">
+g
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="155" y="22.5">
+1
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="325" y="22.5">
+T
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="335" y="22.5">
+h
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="345" y="22.5">
+i
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="355" y="22.5">
+n
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="365" y="22.5">
+g
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="385" y="22.5">
+2
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="85" y="52.5">
+i
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="95" y="52.5">
+n
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="105" y="52.5">
+s
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="175" y="52.5">
+o
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="185" y="52.5">
+u
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="195" y="52.5">
+t
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="205" y="52.5">
+s
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="315" y="52.5">
+i
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="325" y="52.5">
+n
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="335" y="52.5">
+s
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="405" y="52.5">
+o
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="415" y="52.5">
+u
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="425" y="52.5">
+t
+</text>
+<text dominant-baseline="middle" fill="#808080" font-family="monospace" font-size="16" text-anchor="middle" x="435" y="52.5">
+s
+</text>
+</svg>
