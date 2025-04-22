@@ -30,7 +30,7 @@ in your book.
 To install from source
 
 ```shell
-cargo install badascii-mdbook
+cargo install --locked badascii-mdbook
 ```
 This will install the `badascii-mdbook` binary from source.
 
@@ -47,5 +47,5 @@ command = "badascii-mdbook"
 Then you can build your book
 
 ```shell
-mdbook path/to/book
+mdbook build path/to/book
 ```

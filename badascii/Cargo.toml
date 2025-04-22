@@ -2,6 +2,12 @@
 name = "badascii"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "Backend rendering library for BadASCII diagrams.  Block diagrams in ASCII."
+homepage = "https://badascii.me"
+repository = "https://github.com/samitbasu/badascii"
+keywords = ["mdbook", "plugin", "block", "diagram", "ascii"]
+authors = ["Samit Basu <basu.samit@gmail.com>"]
 
 [dependencies]
 ab_glyph = { version = "0.2.29", default-features = false, features = ["std"] }
