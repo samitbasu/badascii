@@ -18,7 +18,7 @@ It turns a badascii diagram like this:
 
 into an embedded SVG like this:
 
-![SVG of diagram](https://github.com/samitbasu/badascii/blob/main/badascii/example.svg)
+![SVG of diagram](https://raw.githubusercontent.com/samitbasu/badascii/refs/heads/main/badascii/example.svg)
 
 
 in your book.
