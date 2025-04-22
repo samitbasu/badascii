@@ -1,12 +1,12 @@
 [package]
 name = "badascii-mdbook"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 description = "Embed badascii diagrams in your mdbook.  See badascii.me for the editor."
 homepage = "https://badascii.me"
 repository = "https://github.com/samitbasu/badascii"
-keywords = ["mdbook", "plugin", "block", "diagram", "ascii"]
+keywords = ["mdbook", "plugin", "block", "diagram", "ascii", "badascii"]
 authors = ["Samit Basu <basu.samit@gmail.com>"]
 
 [dependencies]
@@ -21,3 +21,7 @@ serde_json = "1.0.140"
 
 [dev-dependencies]
 expect-test = "1.5.1"
+
+[[bin]]
+name = "mdbook-badascii"
+path = "src/main.rs"

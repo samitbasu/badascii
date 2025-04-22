@@ -32,7 +32,7 @@ To install from source
 ```shell
 cargo install --locked badascii-mdbook
 ```
-This will install the `badascii-mdbook` binary from source.
+This will install the `mdbook-badascii` binary from source.
 
 ## Configuration
 
@@ -41,8 +41,17 @@ requires adding the following to your `book.toml`
 
 ```toml
 [preprocessor.badascii]
-command = "badascii-mdbook"
 ```
+
+If you also want the formal mode for diagrams, you can include a config
+flag in the `book.toml`.
+
+```toml
+[preprocessor.badascii]
+formal = true
+```
+
+This will convert all of the diagrams using `formal` mode.
 
 Then you can build your book
 

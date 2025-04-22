@@ -8,15 +8,20 @@ use pulldown_cmark::{CodeBlockKind, CowStr, Event, Tag, TagEnd};
 
 // The BadAscii preprocessor.
 pub struct BadAscii;
-fn create_svg_html(s: &str) -> String {
+
+fn create_svg_html(formal_mode: bool, s: &str) -> String {
     let tb = badascii::TextBuffer::with_text(s);
-    let job = badascii::RenderJob::rough(tb);
+    let job = if !formal_mode {
+        badascii::RenderJob::rough(tb)
+    } else {
+        badascii::RenderJob::formal(tb)
+    };
     // TODO - figure out light vs dark mode for MDBook?
     let svg = badascii::svg::render(&job, "currentColor", "none");
     format!("\n\n<pre>{svg}</pre>\n")
 }
 impl BadAscii {
-    fn process_chapter(chapter: &mut Chapter) {
+    fn process_chapter(formal_mode: bool, chapter: &mut Chapter) {
         let parser = pulldown_cmark::Parser::new(&chapter.content);
         let mut buf = String::with_capacity(chapter.content.len() + 128);
         // Inspired by svgbob2 mdbook preprocessor.
@@ -38,7 +43,7 @@ impl BadAscii {
             }
             (Event::End(TagEnd::CodeBlock), true) => {
                 in_block = false;
-                Some(Event::Html(create_svg_html(&diagram).into()))
+                Some(Event::Html(create_svg_html(formal_mode, &diagram).into()))
             }
             _ => Some(event),
         });
@@ -49,20 +54,21 @@ impl BadAscii {
 
 impl Preprocessor for BadAscii {
     fn name(&self) -> &str {
-        "badascii-mdbook"
+        "badascii"
     }
 
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book, Error> {
         // In testing we want to tell the preprocessor to blow up by setting a
         // particular config value
-        if let Some(nop_cfg) = ctx.config.get_preprocessor(self.name()) {
-            if nop_cfg.contains_key("blow-up") {
-                anyhow::bail!("Boom!!1!");
-            }
-        }
+        let formal_mode =
+            if let Some(nop_cfg) = dbg!(&ctx.config).get_preprocessor(dbg!(self.name())) {
+                dbg!(nop_cfg).contains_key("formal")
+            } else {
+                false
+            };
         book.for_each_mut(|item| {
             if let BookItem::Chapter(chapter) = item {
-                Self::process_chapter(chapter);
+                Self::process_chapter(formal_mode, chapter);
             }
         });
 
@@ -80,7 +86,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_md_passthrough() {
+    fn conversion_works() {
         let md = r##"
 # Chapter 1
 
@@ -100,8 +106,34 @@ Here is a diagram of the mascot.
             source_path: None,
             parent_names: vec![],
         };
-        BadAscii::process_chapter(&mut chapter);
+        BadAscii::process_chapter(false, &mut chapter);
         let expect = expect_test::expect_file!["test.md"];
+        expect.assert_eq(&chapter.content);
+    }
+
+    #[test]
+    fn test_formal_mode_works() {
+        let md = r##"
+# Chapter 1
+
+Here is a diagram of the mascot.
+```badascii
+  +----+
+  |  OO|
+  +----+
+```
+        "##;
+        let mut chapter = Chapter {
+            name: "Test".into(),
+            content: md.into(),
+            number: None,
+            sub_items: vec![],
+            path: None,
+            source_path: None,
+            parent_names: vec![],
+        };
+        BadAscii::process_chapter(true, &mut chapter);
+        let expect = expect_test::expect_file!["test_formal.md"];
         expect.assert_eq(&chapter.content);
     }
 
@@ -145,12 +177,10 @@ Here is a diagram of the mascot.
         let input_json = input_json.as_bytes();
 
         let (ctx, book) = mdbook::preprocess::CmdPreprocessor::parse_input(input_json).unwrap();
-        let expected_book = book.clone();
         let result = BadAscii.run(&ctx, book);
         assert!(result.is_ok());
-
-        // The nop-preprocessor should not have made any changes to the book content.
+        let expected_book = expect_test::expect_file!["test.txt"];
         let actual_book = result.unwrap();
-        assert_eq!(actual_book, expected_book);
+        expected_book.assert_debug_eq(&actual_book);
     }
 }
