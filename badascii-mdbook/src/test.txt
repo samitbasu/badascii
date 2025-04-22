@@ -1,0 +1,26 @@
+Book {
+    sections: [
+        Chapter(
+            Chapter {
+                name: "Chapter 1",
+                content: "# Chapter 1",
+                number: Some(
+                    SectionNumber(
+                        [
+                            1,
+                        ],
+                    ),
+                ),
+                sub_items: [],
+                path: Some(
+                    "chapter_1.md",
+                ),
+                source_path: Some(
+                    "chapter_1.md",
+                ),
+                parent_names: [],
+            },
+        ),
+    ],
+    __non_exhaustive: (),
+}
