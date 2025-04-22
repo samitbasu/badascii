@@ -60,12 +60,11 @@ impl Preprocessor for BadAscii {
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book, Error> {
         // In testing we want to tell the preprocessor to blow up by setting a
         // particular config value
-        let formal_mode =
-            if let Some(nop_cfg) = dbg!(&ctx.config).get_preprocessor(dbg!(self.name())) {
-                dbg!(nop_cfg).contains_key("formal")
-            } else {
-                false
-            };
+        let formal_mode = if let Some(nop_cfg) = &ctx.config.get_preprocessor(self.name()) {
+            nop_cfg.contains_key("formal")
+        } else {
+            false
+        };
         book.for_each_mut(|item| {
             if let BookItem::Chapter(chapter) = item {
                 Self::process_chapter(formal_mode, chapter);
