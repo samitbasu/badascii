@@ -6,7 +6,7 @@ license = "MIT"
 description = "Embed badascii diagrams in your mdbook.  See badascii.me for the editor."
 homepage = "https://badascii.me"
 repository = "https://github.com/samitbasu/badascii"
-keywords = ["mdbook", "plugin", "block", "diagram", "ascii", "badascii"]
+keywords = ["mdbook", "plugin", "block", "diagram", "ascii"]
 authors = ["Samit Basu <basu.samit@gmail.com>"]
 
 [dependencies]
