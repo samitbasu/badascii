@@ -10,7 +10,7 @@ egui_dock = "0.16.0"
 egui_extras = "0.31.1"
 env_logger = "0.11.7"
 roughr = "0.9.0"
-badascii = { path = "../badascii" }
+badascii = { version = "0.2.0", path = "../badascii" }
 log = "0.4"
 getrandom = { version = "0.2.15", features = ["js"] }
 miniz_oxide = { version = "0.8.8", features = ["std"] }

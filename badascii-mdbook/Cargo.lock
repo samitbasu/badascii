@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "badascii"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ab_glyph",
  "rasterize",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "badascii-mdbook"
-version = "0.2.1"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "badascii",
