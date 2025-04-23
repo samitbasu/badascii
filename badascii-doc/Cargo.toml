@@ -1,6 +1,6 @@
 [package]
 name = "badascii-doc"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 description = "Proc-macro to include BadASCII diagrams into your rustdoc output.  Block diagrams in ASCII."
@@ -14,7 +14,7 @@ authors = ["Samit Basu <basu.samit@gmail.com>"]
 proc-macro = true
 
 [dependencies]
-badascii = { version = "0.1.1", path = "../badascii" }
+badascii = { version = "0.2.0", path = "../badascii" }
 proc-macro2 = "1.0.94"
 quote = "1.0.40"
 syn = "2.0.100"
