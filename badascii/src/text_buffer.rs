@@ -206,19 +206,14 @@ impl TextBuffer {
     }
 
     pub fn render(&self) -> String {
-        let rows = self.buffer.chunks(self.num_cols as usize);
-        let t = rows.flat_map(|x| {
-            x.iter()
+        let me = self.shrink_to_fit();
+        let rows = me.buffer.chunks(me.num_cols as usize);
+        let t = rows.flat_map(|row| {
+            row.iter()
                 .map(|c| c.unwrap_or(' '))
                 .chain(std::iter::once('\n'))
         });
-        let buf: String = t.collect();
-        let buf = buf
-            .split('\n')
-            .map(|x| x.trim_ascii_end())
-            .filter(|x| !x.is_empty())
-            .collect::<Vec<_>>();
-        buf.join("\n")
+        t.collect()
     }
     #[must_use]
     pub fn resize(&self, resize: Size) -> TextBuffer {
@@ -230,6 +225,35 @@ impl TextBuffer {
             }
         }
         output
+    }
+    pub fn shrink_to_fit(&self) -> TextBuffer {
+        let column_map = (0..self.num_cols).map(|col| {
+            (0..self.num_rows).any(move |row| self.get(TextCoordinate { x: col, y: row }).is_some())
+        });
+        let row_map = (0..self.num_rows).map(|row| {
+            (0..self.num_cols).any(move |col| self.get(TextCoordinate { x: col, y: row }).is_some())
+        });
+        let first_col = column_map.clone().take_while(|x| !*x).count() as u32;
+        let last_col = self
+            .num_cols
+            .saturating_sub(1)
+            .saturating_sub(column_map.rev().take_while(|x| !*x).count() as u32);
+        let first_row = row_map.clone().take_while(|x| !*x).count() as u32;
+        let last_row = self
+            .num_rows
+            .saturating_sub(1)
+            .saturating_sub(row_map.rev().take_while(|x| !*x).count() as u32);
+        let cut_rectangle = Rectangle::new(
+            TextCoordinate {
+                x: first_col,
+                y: first_row,
+            },
+            TextCoordinate {
+                x: last_col,
+                y: last_row,
+            },
+        );
+        self.window(&cut_rectangle)
     }
 }
 
@@ -251,9 +275,10 @@ mod tests {
         let render = tb.render();
         assert_eq!(
             render,
-            "     +--+
-     |  |
-     +--+"
+            "+--+
+|  |
++--+
+"
         );
     }
 
@@ -279,6 +304,34 @@ mod tests {
         let iter = tb.iter_diag_up_right().map(|x| x.1).collect::<String>();
         let expect = expect!["152963074182"];
         expect.assert_eq(&iter);
+    }
+
+    #[test]
+    fn test_trim() {
+        let message: &str = "
+        +--------------+
+        |              |
+        |              |
+        |              |
+        |              |
+        |              |
+        |              |
+        +--------------+ 
+        ";
+        // Note that leading indentation is stripped by expect!
+        let expected = expect_test::expect![[r#"
+            +--------------+
+            |              |
+            |              |
+            |              |
+            |              |
+            |              |
+            |              |
+            +--------------+
+        "#]];
+        let tb = TextBuffer::with_text(message);
+        let render = tb.render();
+        expected.assert_eq(&render);
     }
 
     #[test]

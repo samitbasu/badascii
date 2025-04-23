@@ -22,6 +22,7 @@ impl RenderJob {
     /// Create a rendering job that uses rough lines for
     /// the drawing to give it a more informal look.
     pub fn rough(text: TextBuffer) -> Self {
+        let text = text.shrink_to_fit();
         let width = (text.size().num_cols * 10) as f32;
         let height = (text.size().num_rows * 15) as f32;
         let options = Options::default();
@@ -37,6 +38,7 @@ impl RenderJob {
     /// Put on that suit and tie!  Time for a formal look.
     /// Only clean straight lines here.
     pub fn formal(text: TextBuffer) -> Self {
+        let text = text.shrink_to_fit();
         let width = (text.size().num_cols * 10) as f32;
         let height = (text.size().num_rows * 15) as f32;
         let options = Options {

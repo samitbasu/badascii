@@ -557,10 +557,11 @@ impl MyApp {
                 .on_hover_text("Copy raw SVG to clipboard")
                 .clicked()
             {
+                let text = self.text.shrink_to_fit();
                 let job = RenderJob {
-                    width: self.canvas_size.x * 2.0,
-                    height: self.canvas_size.y * 2.0,
-                    text: self.text.clone(),
+                    width: text.size().num_cols as f32 * 10.0,
+                    height: text.size().num_rows as f32 * 15.0,
+                    text,
                     options: self.roughr_options(),
                     x0: 0.0,
                     y0: 0.0,
@@ -575,10 +576,11 @@ impl MyApp {
                 .on_hover_text("Copy image to clipboard")
                 .clicked()
             {
+                let text = self.text.shrink_to_fit();
                 let job = RenderJob {
-                    width: self.canvas_size.x * 2.0,
-                    height: self.canvas_size.y * 2.0,
-                    text: self.text.clone(),
+                    width: text.size().num_cols as f32 * 10.0,
+                    height: text.size().num_rows as f32 * 15.0,
+                    text,
                     options: self.roughr_options(),
                     x0: 0.0,
                     y0: 0.0,

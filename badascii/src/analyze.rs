@@ -284,19 +284,23 @@ fn get_horizontal_line_segments(tb: &TextBuffer) -> Vec<LineSegment> {
 }
 
 fn get_diag_down_right_segments(tb: &TextBuffer) -> Vec<LineSegment> {
-    line_segment_finder(
+    let mut lines = line_segment_finder(
         tb.iter_diag_down_right()
             .filter_map(|(pos, ch)| classify_diag_down_right(ch).map(|k| (pos, k))),
         |track, candidate| track.y + 1 == candidate.y && track.x + 1 == candidate.x,
-    )
+    );
+    lines.retain(|ls| ls.len() >= 2);
+    lines
 }
 
 fn get_diag_up_right_segments(tb: &TextBuffer) -> Vec<LineSegment> {
-    line_segment_finder(
+    let mut lines = line_segment_finder(
         tb.iter_diag_up_right()
             .filter_map(|(pos, ch)| classify_diag_down_left(ch).map(|k| (pos, k))),
         |track, candidate| track.y == candidate.y + 1 && track.x + 1 == candidate.x,
-    )
+    );
+    lines.retain(|ls| ls.len() >= 2);
+    lines
 }
 
 #[cfg(test)]
