@@ -3,14 +3,24 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{LitStr, parse_macro_input};
 
+fn strip_outer(x: &str) -> String {
+    let x = x
+        .chars()
+        .skip_while(|&c| c != '"')
+        .skip(1)
+        .collect::<String>();
+    let x = x
+        .chars()
+        .rev()
+        .skip_while(|&c| c != '"')
+        .skip(1)
+        .collect::<String>();
+    x.chars().rev().collect()
+}
+
 fn get_text_buffer(input: LitStr) -> TextBuffer {
     let input = input.token().to_string();
-    let input_len = input.len();
-    let input = input
-        .chars()
-        .skip(1)
-        .take(input_len - 2)
-        .collect::<String>();
+    let input = strip_outer(&input);
     TextBuffer::with_text(&input)
 }
 
