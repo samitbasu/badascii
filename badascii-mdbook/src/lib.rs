@@ -22,7 +22,9 @@ fn create_svg_html(formal_mode: bool, s: &str) -> String {
 }
 impl BadAscii {
     fn process_chapter(formal_mode: bool, chapter: &mut Chapter) {
-        let parser = pulldown_cmark::Parser::new(&chapter.content);
+        let mut options = pulldown_cmark::Options::empty();
+        options.insert(pulldown_cmark::Options::ENABLE_TABLES);
+        let parser = pulldown_cmark::Parser::new_ext(&chapter.content, options);
         let mut buf = String::with_capacity(chapter.content.len() + 128);
         // Inspired by svgbob2 mdbook preprocessor.
 
